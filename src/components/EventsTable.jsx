@@ -38,9 +38,9 @@ export default function EventsTable({ events, contributions, onUpdate, onDelete,
             <tr>
               <th>Сигнал</th>
               <th>Место</th>
-              <th title="Количество">Кол.</th>
-              <th title="Интенсивность 1-10">Инт.</th>
-              <th title="Вклад в общую оценку">%</th>
+              <th title="Сколько раз замечено">Сколько</th>
+              <th title="Заметность: 1 — едва видно, 10 — очень ярко">Заметность</th>
+              <th title="Вклад в общую оценку">вклад</th>
               <th></th>
             </tr>
           </thead>
