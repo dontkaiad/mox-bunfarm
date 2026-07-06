@@ -112,7 +112,7 @@
 /* ── Main layout: left panel + right area ── */
 .main-layout {
   display: grid;
-  grid-template-columns: 370px 1fr;
+  grid-template-columns: 460px 1fr;
   gap: 10px;
   align-items: start;
 }
