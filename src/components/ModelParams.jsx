@@ -57,7 +57,7 @@ export default function ModelParams({ params, onUpdate, hint }) {
         <div className="model-params-body">
           {/* Movement window — global param */}
           <div className="param-block">
-            <div className="param-type-label">🏃 Как быстро кролики перемещаются по ферме</div>
+            <div className="param-type-label">🏃 Скорость перемещения</div>
             <PresetGroup
               presets={MOVEMENT_PRESETS}
               current={params.movementWindowMinutes}
@@ -79,14 +79,14 @@ export default function ModelParams({ params, onUpdate, hint }) {
               <div key={type} className="param-block">
                 <div className="param-type-label">{meta.emoji} {meta.label}</div>
 
-                <div className="param-row-label">Насколько верить этому сигналу:</div>
+                <div className="param-row-label">Доверие к сигналу:</div>
                 <PresetGroup
                   presets={RELIABILITY_PRESETS}
                   current={params.reliability[type]}
                   onSelect={v => onUpdate('reliability', type, v)}
                 />
 
-                <div className="param-row-label">Сколько кроликов за одним сигналом:</div>
+                <div className="param-row-label">Кроликов за один сигнал:</div>
                 <PresetGroup
                   presets={RPU_PRESETS}
                   current={params.rabbitsPerUnit[type]}
