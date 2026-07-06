@@ -14,7 +14,8 @@ import ModelParams     from './components/ModelParams.jsx'
 import FarmMap         from './components/FarmMap.jsx'
 import ZonePopup       from './components/ZonePopup.jsx'
 import Recommendations from './components/Recommendations.jsx'
-import Worklog         from './components/Worklog.jsx'
+import Worklog            from './components/Worklog.jsx'
+import EstimateBreakdown  from './components/EstimateBreakdown.jsx'
 import './App.css'
 
 const TABS = [
@@ -131,6 +132,14 @@ export default function App() {
   return (
     <div className="app">
       <Header rabbits={rabbits} confidence={confidence} explanation={explanation} />
+
+      <EstimateBreakdown
+        rabbits={rabbits}
+        confidence={confidence}
+        contributions={contributions}
+        events={events}
+        params={params}
+      />
 
       <div className="main-layout">
         <div className="left-panel">
