@@ -347,8 +347,9 @@
 
 .farm-map-svg {
   width: 100%;
-  max-width: 440px;
-  flex-shrink: 0;
+  max-width: 680px;   /* cap at something readable on ultrawide; grows freely below that */
+  flex: 1 1 auto;
+  min-width: 260px;
   border-radius: 6px;
   box-shadow: 3px 3px 0 rgba(0,0,0,0.4);
   transition: all 0.2s;
@@ -362,8 +363,8 @@
 
 /* ── Zone popup ── */
 .zone-popup {
-  flex: 1;
-  min-width: 200px;
+  flex: 0 0 210px;
+  width: 210px;
   background:
     repeating-linear-gradient(
       90deg,
