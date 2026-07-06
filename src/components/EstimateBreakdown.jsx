@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { EVENT_META } from '../data.js'
 import { getConfidenceFactors, FACTOR_WEIGHTS } from '../confidence.js'
 
@@ -26,18 +26,14 @@ function FactorBar({ label, value, weight }) {
 }
 
 export default function EstimateBreakdown({ rabbits, confidence, contributions, events, params }) {
-  const [open, setOpen] = useState(false)
-
   const factors = useMemo(() => getConfidenceFactors(events, params), [events, params])
   const evtMap  = useMemo(() => Object.fromEntries(events.map(e => [e.id, e])), [events])
 
-  // totalValue for converting raw scores to rabbit units
   const totalValue = useMemo(
     () => contributions.reduce((s, c) => s + c.value, 0),
     [contributions]
   )
 
-  // Sort by raw contribution value descending so the biggest drivers are first
   const ranked = useMemo(() => {
     return [...contributions]
       .sort((a, b) => b.value - a.value)
@@ -52,65 +48,56 @@ export default function EstimateBreakdown({ rabbits, confidence, contributions, 
   }, [contributions, evtMap, rabbits, totalValue])
 
   return (
-    <div className="breakdown-wrap panel">
-      <button className="breakdown-toggle" onClick={() => setOpen(o => !o)}>
-        <span>🔍 Почему такая оценка?</span>
-        <span>{open ? '▲' : '▼'}</span>
-      </button>
+    <div className="breakdown-body">
 
-      {open && (
-        <div className="breakdown-body">
+      {/* ── Signal ranking ── */}
+      <div className="breakdown-section">
+        <div className="breakdown-section-title">Вклад каждого сигнала</div>
+        {ranked.length === 0 ? (
+          <p className="breakdown-empty">Нет данных</p>
+        ) : (
+          <ul className="breakdown-list">
+            {ranked.map(item => (
+              <li key={item.id} className={`breakdown-row${item.isCollapsed ? ' dim' : ''}`}>
+                <span className="bd-emoji">{item.meta?.emoji}</span>
+                <span className="bd-name">
+                  {item.meta?.label}
+                  <span className="bd-location">&nbsp;({item.evt.location})</span>
+                </span>
+                <span className="bd-value">
+                  {item.isCollapsed
+                    ? <span className="bd-zero">—</span>
+                    : `+${item.rabbitsForSignal.toFixed(2)} 🐰`}
+                </span>
+                <span className="bd-desc">{signalDesc(item.rabbitsForSignal, item.isCollapsed)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
-          {/* ── Signal ranking ── */}
-          <div className="breakdown-section">
-            <div className="breakdown-section-title">Вклад каждого сигнала</div>
-            {ranked.length === 0 ? (
-              <p className="breakdown-empty">Нет данных</p>
-            ) : (
-              <ul className="breakdown-list">
-                {ranked.map(item => (
-                  <li key={item.id} className={`breakdown-row${item.isCollapsed ? ' dim' : ''}`}>
-                    <span className="bd-emoji">{item.meta?.emoji}</span>
-                    <span className="bd-name">
-                      {item.meta?.label}
-                      <span className="bd-location">&nbsp;({item.evt.location})</span>
-                    </span>
-                    <span className="bd-value">
-                      {item.isCollapsed
-                        ? <span className="bd-zero">—</span>
-                        : `+${item.rabbitsForSignal.toFixed(2)} 🐰`}
-                    </span>
-                    <span className="bd-desc">{signalDesc(item.rabbitsForSignal, item.isCollapsed)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* ── Confidence factor breakdown ── */}
-          <div className="breakdown-section">
-            <div className="breakdown-section-title">
-              Из чего складывается уверенность {confidence}%
-            </div>
-            <FactorBar
-              label="Разнообразие сигналов"
-              value={factors.diversity}
-              weight={FACTOR_WEIGHTS.diversity}
-            />
-            <FactorBar
-              label="Сила следов"
-              value={factors.avgIntensity}
-              weight={FACTOR_WEIGHTS.intensity}
-            />
-            <FactorBar
-              label="Согласованность по зонам"
-              value={factors.consistency}
-              weight={FACTOR_WEIGHTS.consistency}
-            />
-          </div>
-
+      {/* ── Confidence factor breakdown ── */}
+      <div className="breakdown-section">
+        <div className="breakdown-section-title">
+          Из чего складывается уверенность {confidence}%
         </div>
-      )}
+        <FactorBar
+          label="Разнообразие сигналов"
+          value={factors.diversity}
+          weight={FACTOR_WEIGHTS.diversity}
+        />
+        <FactorBar
+          label="Сила следов"
+          value={factors.avgIntensity}
+          weight={FACTOR_WEIGHTS.intensity}
+        />
+        <FactorBar
+          label="Согласованность по зонам"
+          value={factors.consistency}
+          weight={FACTOR_WEIGHTS.consistency}
+        />
+      </div>
+
     </div>
   )
 }

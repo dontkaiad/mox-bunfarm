@@ -591,28 +591,7 @@
   line-height: 1.4;
 }
 
-/* ── Estimate breakdown panel ── */
-.breakdown-wrap {
-  /* inherits .panel wooden styling */
-}
-
-.breakdown-toggle {
-  width: 100%;
-  background: rgba(92,51,25,0.08);
-  border: none;
-  border-radius: 3px;
-  padding: 8px 14px;
-  text-align: left;
-  font-size: 1rem;
-  color: var(--panel-header);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.breakdown-toggle:hover { background: rgba(92,51,25,0.15); }
-
+/* ── Estimate breakdown (renders inside tab-content) ── */
 .breakdown-body {
   display: flex;
   gap: 0;

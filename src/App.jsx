@@ -19,9 +19,10 @@ import EstimateBreakdown  from './components/EstimateBreakdown.jsx'
 import './App.css'
 
 const TABS = [
-  { id: 'map',     label: '🗺️ Карта' },
-  { id: 'recs',    label: '📋 Рекомендации' },
-  { id: 'worklog', label: '🤖 AI Журнал' },
+  { id: 'map',       label: '🗺️ Карта' },
+  { id: 'breakdown', label: '🔍 Разбор оценки' },
+  { id: 'recs',      label: '📋 Рекомендации' },
+  { id: 'worklog',   label: '🤖 AI Журнал' },
 ]
 
 const HINT_THRESHOLD   = 0.05
@@ -133,14 +134,6 @@ export default function App() {
     <div className="app">
       <Header rabbits={rabbits} confidence={confidence} explanation={explanation} />
 
-      <EstimateBreakdown
-        rabbits={rabbits}
-        confidence={confidence}
-        contributions={contributions}
-        events={events}
-        params={params}
-      />
-
       <div className="main-layout">
         <div className="left-panel">
           <div className="panel" style={{ padding: '10px 12px 12px' }}>
@@ -197,6 +190,16 @@ export default function App() {
                 byZone={byZone}
                 contributions={contributions}
                 llmRecs={llmRecs}
+              />
+            )}
+
+            {activeTab === 'breakdown' && (
+              <EstimateBreakdown
+                rabbits={rabbits}
+                confidence={confidence}
+                contributions={contributions}
+                events={events}
+                params={params}
               />
             )}
 
