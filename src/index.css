@@ -1,0 +1,195 @@
+/* ── Global reset + Stardew Valley theme tokens ── */
+:root {
+  --bg:              #1e4d2b;
+  --bg-dark:         #162e1a;
+  --panel-bg:        #f5e6c8;
+  --panel-bg-dark:   #ead5b0;
+  --panel-border:    #8b5e3c;
+  --panel-header:    #5c3319;
+  --panel-header-text: #f5e6c8;
+  --text:            #3d1f00;
+  --text-muted:      #7a5235;
+  --text-light:      #f5e6c8;
+  --accent:          #e8a020;
+  --accent-hover:    #f5b835;
+  --danger:          #c84b0f;
+  --danger-hover:    #e05a1a;
+  --heat-cold:       hsl(120, 28%, 35%);
+  --heat-hot:        hsl(20, 82%, 42%);
+
+  --font: 'VT323', monospace;
+  font-family: var(--font);
+  font-size: 20px;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  min-height: 100svh;
+}
+
+/* Subtle grass-tile background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 15% 25%, rgba(255,255,255,0.04) 0%, transparent 40%),
+    radial-gradient(circle at 85% 70%, rgba(0,0,0,0.12) 0%, transparent 45%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1340px;
+  margin: 0 auto;
+  padding: 10px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100svh;
+  text-align: left;
+}
+
+/* ── Shared wooden panel ── */
+.panel {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px, transparent 14px,
+      rgba(0,0,0,0.025) 14px, rgba(0,0,0,0.025) 15px
+    ),
+    linear-gradient(180deg, var(--panel-bg) 0%, var(--panel-bg-dark) 100%);
+  border: 3px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.35);
+}
+
+.panel-header {
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px, transparent 16px,
+      rgba(0,0,0,0.05) 16px, rgba(0,0,0,0.05) 17px
+    ),
+    linear-gradient(180deg, #6b3e1e 0%, var(--panel-header) 100%);
+  color: var(--panel-header-text);
+  padding: 6px 14px;
+  font-size: 1.1rem;
+  border-bottom: 2px solid var(--panel-border);
+  border-radius: 3px 3px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  color: var(--panel-header);
+  border-bottom: 2px solid var(--panel-border);
+  padding: 4px 0 4px;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Pixel buttons ── */
+button {
+  font-family: var(--font);
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--text);
+  border: 2px solid var(--panel-border);
+  padding: 4px 14px;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+  transition: background 0.12s, transform 0.08s;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 rgba(0,0,0,0.3); }
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: 2px solid #8b2500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+}
+.btn-danger:hover { background: var(--danger-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--panel-border);
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.btn-ghost:hover { background: rgba(0,0,0,0.08); }
+
+/* ── Pixel inputs ── */
+input[type="number"],
+input[type="time"],
+select {
+  font-family: var(--font);
+  font-size: 0.95rem;
+  background: #fff8ec;
+  border: 2px solid var(--panel-border);
+  color: var(--text);
+  padding: 2px 5px;
+  border-radius: 3px;
+  outline: none;
+}
+input[type="number"]:focus,
+input[type="time"]:focus,
+select:focus { border-color: var(--accent); }
+
+input[type="range"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 100%;
+}
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.tab-btn {
+  background: var(--panel-bg-dark);
+  color: var(--text-muted);
+  border: 2px solid var(--panel-border);
+  border-bottom: none;
+  padding: 5px 16px;
+  border-radius: 4px 4px 0 0;
+  font-size: 1rem;
+  box-shadow: 2px -2px 0 rgba(0,0,0,0.15);
+  transition: background 0.1s, color 0.1s;
+}
+.tab-btn:hover { background: var(--panel-bg); color: var(--text); }
+.tab-btn.active {
+  background: var(--panel-bg);
+  color: var(--panel-header);
+  font-weight: bold;
+  border-color: var(--panel-border);
+}
+
+/* ── Scrollbars (inside panels) ── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--panel-bg-dark); }
+::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 3px; }
