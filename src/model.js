@@ -1,19 +1,23 @@
-// Default model parameters - all user-adjustable via sliders
+// Default model parameters - all user-adjustable via preset buttons
+// rabbitsPerUnit and reliability values are snapped to the nearest UI preset
+// (мало=0.3 / средне=1.0 / много=2.0  and  слабо=0.3 / средне=0.6 / сильно=0.9)
 export const DEFAULT_PARAMS = {
   rabbitsPerUnit: {
-    missing_carrot:  0.3, // 1 carrot ≈ 0.3 rabbits (weak signal)
-    new_hole:        1.0, // 1 hole ≈ 1 rabbit
-    motion_sensor:   2.0, // 1 trigger ≈ 2 rabbits (strong signal)
-    rustle_detected: 0.5,
-    footprints:      0.4,
+    missing_carrot:  0.3,  // мало
+    new_hole:        1.0,  // средне
+    motion_sensor:   2.0,  // много
+    rustle_detected: 0.3,  // мало
+    footprints:      0.3,  // мало
   },
   reliability: {
-    missing_carrot:  0.4,
-    new_hole:        0.6,
-    rustle_detected: 0.5,
-    footprints:      0.7,
-    motion_sensor:   0.9,
+    missing_carrot:  0.3,  // слабо
+    new_hole:        0.6,  // средне
+    rustle_detected: 0.6,  // средне
+    footprints:      0.6,  // средне
+    motion_sensor:   0.9,  // сильно
   },
+  // Cross-zone movement window in minutes (presets: медленно=60 / средне=30 / быстро=15)
+  movementWindowMinutes: 30,
 }
 
 // Confidence scoring weights - must sum to 1.0
@@ -23,8 +27,11 @@ export const CONFIDENCE_WEIGHTS = {
   consistency: 0.35, // how evenly signals distribute across zones
 }
 
-// Events of same type+location within this window are considered the same rabbits
+// Events of same type+location within this window are the same rabbits milling in place
 const COLLAPSE_WINDOW_MINUTES = 60
+
+// Fraction of the smaller cross-zone contribution to subtract when rabbits may have moved
+const MOVEMENT_COEFFICIENT = 0.5
 
 function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number)
@@ -37,8 +44,9 @@ export function eventContribution(evt, params) {
   return evt.count * rpu * rel * (evt.intensity / 10)
 }
 
-// Collapse same-type+same-location events within COLLAPSE_WINDOW_MINUTES:
-// clusters are anchored at the first event's time; keep the max-contribution winner
+// ── Layer 1: same-type+same-zone collapse ──────────────────────────────────
+// Events clustered within COLLAPSE_WINDOW_MINUTES: keep the max-contribution
+// winner (they're the same rabbits seen multiple times in the same spot).
 function collapseEvents(events, params) {
   const groups = new Map()
   for (const evt of events) {
@@ -52,10 +60,8 @@ function collapseEvents(events, params) {
     const sorted = [...group].sort(
       (a, b) => timeToMinutes(a.time) - timeToMinutes(b.time)
     )
-
     let clusterStart = timeToMinutes(sorted[0].time)
     let cluster = [sorted[0]]
-
     for (let i = 1; i < sorted.length; i++) {
       const t = timeToMinutes(sorted[i].time)
       if (t - clusterStart <= COLLAPSE_WINDOW_MINUTES) {
@@ -68,7 +74,6 @@ function collapseEvents(events, params) {
     }
     result.push(pickBest(cluster, params))
   }
-
   return result
 }
 
@@ -78,11 +83,47 @@ function pickBest(cluster, params) {
   )
 }
 
-// Total estimated rabbit count (applies collapsing)
+// ── Layer 2: cross-zone movement correction ────────────────────────────────
+// After layer-1 collapse, some pairs of events in DIFFERENT zones within
+// movementWindowMinutes may represent the same rabbit that moved. This is
+// probabilistic: subtract MOVEMENT_COEFFICIENT × min(a, b) from the smaller
+// event's contribution. Never zero it out — different rabbits remain possible.
+// Exclusion: timeDiff === 0 → simultaneous events in different zones are
+//            definitely different rabbits (no subtraction).
+function applyMovementCorrection(collapsedEvents, params) {
+  const windowMinutes = params.movementWindowMinutes ?? 30
+  const n = collapsedEvents.length
+  if (n < 2) {
+    return collapsedEvents.reduce((s, e) => s + eventContribution(e, params), 0)
+  }
+
+  const values = collapsedEvents.map(e => eventContribution(e, params))
+  // Accumulated reduction per event — applied at the end with a floor of 0
+  const reductions = new Array(n).fill(0)
+
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (collapsedEvents[i].location === collapsedEvents[j].location) continue
+
+      const dt = Math.abs(
+        timeToMinutes(collapsedEvents[i].time) - timeToMinutes(collapsedEvents[j].time)
+      )
+      // Same time → definitely different rabbits; beyond window → unrelated
+      if (dt === 0 || dt > windowMinutes) continue
+
+      const smallerIdx = values[i] <= values[j] ? i : j
+      reductions[smallerIdx] += Math.min(values[i], values[j]) * MOVEMENT_COEFFICIENT
+    }
+  }
+
+  return values.reduce((sum, v, i) => sum + Math.max(0, v - reductions[i]), 0)
+}
+
+// Total estimated rabbit count (layer-1 collapse + layer-2 movement correction)
 export function calculateRabbits(events, params) {
   if (!events.length) return 0
-  return collapseEvents(events, params)
-    .reduce((sum, evt) => sum + eventContribution(evt, params), 0)
+  const collapsed = collapseEvents(events, params)
+  return applyMovementCorrection(collapsed, params)
 }
 
 // Confidence score 0..100 from three weighted factors
@@ -122,27 +163,26 @@ export function calculateConfidence(events, params) {
 }
 
 // Per-event contribution as percent of total (collapsed losers get 0%)
+// Note: percentages are computed from pre-correction contributions; they reflect
+// relative signal importance, not exact fractions of the corrected total.
 export function calculateContributions(events, params) {
   if (!events.length) return []
-
   const collapsed = collapseEvents(events, params)
   const winnerIds = new Set(collapsed.map(e => e.id))
-
   const scores = events.map(evt => ({
     id: evt.id,
     value: winnerIds.has(evt.id) ? eventContribution(evt, params) : 0,
   }))
-
   const total = scores.reduce((s, c) => s + c.value, 0)
   if (total === 0) return scores.map(c => ({ ...c, percent: 0 }))
-
   return scores.map(c => ({
     ...c,
     percent: Math.round((c.value / total) * 100),
   }))
 }
 
-// Rabbit estimate broken down per farm zone
+// Rabbit estimate per farm zone (layer-1 collapse only; no cross-zone correction
+// since each zone's subset has no cross-zone pairs by definition)
 export function calculateByZone(events, params) {
   const zones = {}
   for (const evt of events) {

@@ -73,9 +73,11 @@ describe('calculateRabbits', () => {
   })
 
   it('does NOT collapse same type in different locations', () => {
+    // Use timeDiff=0 to isolate from cross-zone movement correction
+    // (simultaneous sightings in different zones = definitely different rabbits)
     const events = [
       evt({ id: 'a', location: 'Огород',  time: '10:00' }),
-      evt({ id: 'b', location: 'Теплица', time: '10:20' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:00' }),
     ]
     const expected =
       eventContribution(events[0], DEFAULT_PARAMS) +
@@ -100,7 +102,10 @@ describe('calculateRabbits', () => {
       ...DEFAULT_PARAMS,
       rabbitsPerUnit: { ...DEFAULT_PARAMS.rabbitsPerUnit, footprints: 5.0 },
     }
-    expect(calculateRabbits(events, customParams)).toBeCloseTo(5.0 * 0.7 * 1.0)
+    // 5.0 * DEFAULT_PARAMS.reliability.footprints * 1.0 (intensity/10 = 1)
+    expect(calculateRabbits(events, customParams)).toBeCloseTo(
+      5.0 * DEFAULT_PARAMS.reliability.footprints * 1.0
+    )
   })
 })
 
@@ -196,6 +201,73 @@ describe('calculateContributions', () => {
     const events = [evt({ id: 'e1' })]
     const contribs = calculateContributions(events, DEFAULT_PARAMS)
     expect(contribs[0]).toMatchObject({ id: 'e1', value: expect.any(Number), percent: expect.any(Number) })
+  })
+})
+
+describe('cross-zone movement correction', () => {
+  // Use a fixed 30-min window explicitly so tests are independent of DEFAULT_PARAMS changes
+  const P = { ...DEFAULT_PARAMS, movementWindowMinutes: 30 }
+
+  it('same time, different zones → no correction (definitely different rabbits)', () => {
+    const events = [
+      evt({ id: 'a', location: 'Огород',  time: '10:00' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:00' }),
+    ]
+    const expected = eventContribution(events[0], P) + eventContribution(events[1], P)
+    expect(calculateRabbits(events, P)).toBeCloseTo(expected)
+  })
+
+  it('close time, different zones → partial reduction, never zero', () => {
+    const events = [
+      evt({ id: 'a', location: 'Огород',  time: '10:00' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:20' }),
+    ]
+    const raw = eventContribution(events[0], P) + eventContribution(events[1], P)
+    const result = calculateRabbits(events, P)
+    expect(result).toBeLessThan(raw)
+    expect(result).toBeGreaterThan(0)
+    // Both events identical → smaller === either → reduction = value * 0.5
+    const val = eventContribution(events[0], P)
+    expect(result).toBeCloseTo(raw - val * 0.5)
+  })
+
+  it('time beyond window → no correction', () => {
+    const events = [
+      evt({ id: 'a', location: 'Огород',  time: '10:00' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:35' }), // 35 min > 30-min window
+    ]
+    const expected = eventContribution(events[0], P) + eventContribution(events[1], P)
+    expect(calculateRabbits(events, P)).toBeCloseTo(expected)
+  })
+
+  it('reduction targets the smaller-contribution event only', () => {
+    const strong = evt({ id: 's', location: 'Сарай',   event: 'motion_sensor', count: 3, intensity: 9, time: '10:00' })
+    const weak   = evt({ id: 'w', location: 'Теплица', event: 'footprints',    count: 1, intensity: 2, time: '10:15' })
+    const weakVal   = eventContribution(weak,   P)
+    const strongVal = eventContribution(strong, P)
+    const result = calculateRabbits([strong, weak], P)
+    // Weak is smaller → reduction = weakVal * 0.5 subtracted from weak only
+    expect(result).toBeCloseTo(strongVal + weakVal * 0.5)
+  })
+
+  it('same zone, close time → no movement correction (layer-1 collapse applies instead)', () => {
+    const events = [
+      evt({ id: 'a', location: 'Огород', count: 1, intensity: 8, time: '10:00' }),
+      evt({ id: 'b', location: 'Огород', count: 1, intensity: 8, time: '10:20' }),
+    ]
+    // Same type+zone within 60 min → collapses to one; movement correction skips same-zone pairs
+    const singleScore = eventContribution(events[0], P)
+    expect(calculateRabbits(events, P)).toBeCloseTo(singleScore)
+  })
+
+  it('movementWindowMinutes=0 disables cross-zone correction entirely', () => {
+    const noMovement = { ...P, movementWindowMinutes: 0 }
+    const events = [
+      evt({ id: 'a', location: 'Огород',  time: '10:00' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:01' }),
+    ]
+    const expected = eventContribution(events[0], noMovement) + eventContribution(events[1], noMovement)
+    expect(calculateRabbits(events, noMovement)).toBeCloseTo(expected)
   })
 })
 
