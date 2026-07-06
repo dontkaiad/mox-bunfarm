@@ -1,8 +1,15 @@
 services:
   api:
     build: ./api
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     env_file:
       - .env
     restart: unless-stopped
+    networks:
+      - nexus-arcana
+
+networks:
+  nexus-arcana:
+    external: true
+    name: nexus-arcana_default
