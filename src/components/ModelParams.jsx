@@ -44,7 +44,7 @@ function PresetGroup({ presets, current, onSelect }) {
 }
 
 export default function ModelParams({ params, onUpdate, hint }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
 
   return (
     <div className="model-params-wrap panel">
