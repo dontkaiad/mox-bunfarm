@@ -704,7 +704,7 @@
 .bd-name     { font-size: 0.9rem; color: var(--text); flex: 1; min-width: 0; }
 .bd-location { font-size: 0.8rem; color: var(--text-muted); }
 
-/* Role badge */
+/* Role badge — transitions make class changes visible when params update */
 .bd-role {
   font-size: 0.75rem;
   padding: 1px 7px;
@@ -712,6 +712,7 @@
   white-space: nowrap;
   flex-shrink: 0;
   border: 1px solid currentColor;
+  transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 .bd-role.role-main    { color: #c84b0f; background: rgba(200,75,15,0.1); }
 .bd-role.role-notable { color: var(--panel-header); background: rgba(92,51,25,0.1); }
@@ -789,7 +790,7 @@
 .factor-bar-fill.mid  { background: #e8a020; }
 .factor-bar-fill.low  { background: #c84b0f; }
 
-.factor-level        { font-size: 0.8rem; }
+.factor-level        { font-size: 0.8rem; transition: color 0.3s ease; }
 .factor-level.high   { color: #4caf50; }
 .factor-level.mid    { color: #e8a020; }
 .factor-level.low    { color: #c84b0f; }
