@@ -594,9 +594,66 @@
 /* ── Estimate breakdown (renders inside tab-content) ── */
 .breakdown-body {
   display: flex;
+  flex-direction: column;
   gap: 0;
+}
+
+/* ── Model explanation intro block ── */
+.model-explainer {
+  border-bottom: 1px solid rgba(139,94,60,0.3);
+  margin-bottom: 0;
+}
+
+.model-explainer-toggle {
+  width: 100%;
+  background: rgba(92,51,25,0.06);
+  border: none;
+  padding: 7px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  color: var(--panel-header);
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+.model-explainer-toggle:hover { background: rgba(92,51,25,0.13); }
+
+.model-steps {
+  list-style: none;
+  counter-reset: steps;
+  padding: 8px 14px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: rgba(245,230,200,0.35);
+}
+
+.model-steps li {
+  counter-increment: steps;
+  display: flex;
+  gap: 8px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.model-steps li::before {
+  content: counter(steps) ".";
+  color: var(--panel-header);
+  font-weight: bold;
+  flex-shrink: 0;
+  min-width: 14px;
+}
+
+.model-steps strong { color: var(--panel-header); font-weight: bold; }
+
+/* ── Two-column sections row ── */
+.breakdown-sections {
+  display: flex;
   flex-wrap: wrap;
-  border-top: 2px solid var(--panel-border);
+  gap: 0;
 }
 
 .breakdown-section {
