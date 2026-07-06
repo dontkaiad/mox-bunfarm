@@ -615,66 +615,105 @@
   letter-spacing: 0.3px;
 }
 
-.breakdown-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.breakdown-row {
-  display: grid;
-  grid-template-columns: 22px 1fr 90px auto;
-  gap: 6px;
-  align-items: baseline;
-  font-size: 0.88rem;
-  padding: 2px 0;
-  border-bottom: 1px dashed rgba(139,94,60,0.15);
-}
-.breakdown-row:last-child { border-bottom: none; }
-.breakdown-row.dim { opacity: 0.5; }
-
-.bd-emoji  { font-size: 1rem; line-height: 1; }
-.bd-name   { color: var(--text); line-height: 1.3; }
-.bd-location { color: var(--text-muted); font-size: 0.82rem; }
-
-.bd-value {
-  text-align: right;
-  font-size: 0.9rem;
-  color: var(--panel-header);
-  white-space: nowrap;
-  transition: color 0.25s;
-}
-.bd-zero { color: var(--text-muted); }
-
-.bd-desc {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .breakdown-empty {
   font-size: 0.88rem;
   color: var(--text-muted);
   padding: 4px 0;
 }
 
-/* ── Confidence factor bars ── */
-.factor-row {
-  display: grid;
-  grid-template-columns: 1fr 100px 52px 52px;
-  gap: 8px;
-  align-items: center;
-  padding: 4px 0;
-  font-size: 0.85rem;
-  border-bottom: 1px dashed rgba(139,94,60,0.12);
+/* ── Signal contribution list ── */
+.bd-signal-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-.factor-row:last-child { border-bottom: none; }
 
-.factor-label { color: var(--text); }
+.bd-signal-item {
+  padding: 7px 0;
+  border-bottom: 1px dashed rgba(139,94,60,0.2);
+}
+.bd-signal-item:last-child { border-bottom: none; }
+.bd-signal-item.dim { opacity: 0.45; }
+
+.bd-signal-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.bd-emoji    { font-size: 1rem; flex-shrink: 0; }
+.bd-name     { font-size: 0.9rem; color: var(--text); flex: 1; min-width: 0; }
+.bd-location { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Role badge */
+.bd-role {
+  font-size: 0.75rem;
+  padding: 1px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid currentColor;
+}
+.bd-role.role-main    { color: #c84b0f; background: rgba(200,75,15,0.1); }
+.bd-role.role-notable { color: var(--panel-header); background: rgba(92,51,25,0.1); }
+.bd-role.role-minor   { color: var(--text-muted); background: rgba(139,94,60,0.08); }
+.bd-role.role-tiny    { color: var(--text-muted); background: transparent; }
+.bd-role.role-dup     { color: var(--text-muted); background: transparent; border-style: dashed; }
+
+.bd-signal-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 26px; /* indent under emoji */
+}
+
+.bd-share-track {
+  width: 80px;
+  flex-shrink: 0;
+  height: 7px;
+  background: rgba(139,94,60,0.15);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(139,94,60,0.2);
+}
+.bd-share-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.bd-share-fill.role-main    { background: #c84b0f; }
+.bd-share-fill.role-notable { background: var(--accent); }
+.bd-share-fill.role-minor   { background: #8b9a60; }
+.bd-share-fill.role-tiny    { background: #bba07a; }
+
+.bd-signal-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.3;
+}
+.bd-dup-note {
+  padding-left: 26px;
+  margin-top: 2px;
+}
+
+/* ── Confidence factor bars ── */
+.factor-item {
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(139,94,60,0.15);
+}
+.factor-item:last-child { border-bottom: none; }
+
+.factor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.factor-label { font-size: 0.88rem; color: var(--text); }
 
 .factor-bar-track {
   height: 9px;
@@ -682,8 +721,8 @@
   border-radius: 3px;
   overflow: hidden;
   border: 1px solid rgba(139,94,60,0.25);
+  margin-bottom: 4px;
 }
-
 .factor-bar-fill {
   height: 100%;
   border-radius: 3px;
@@ -693,13 +732,14 @@
 .factor-bar-fill.mid  { background: #e8a020; }
 .factor-bar-fill.low  { background: #c84b0f; }
 
-.factor-level        { text-align: center; font-size: 0.82rem; }
+.factor-level        { font-size: 0.8rem; }
 .factor-level.high   { color: #4caf50; }
 .factor-level.mid    { color: #e8a020; }
 .factor-level.low    { color: #c84b0f; }
 
-.factor-weight {
-  text-align: right;
+.factor-consequence {
   font-size: 0.78rem;
   color: var(--text-muted);
+  font-style: italic;
+  line-height: 1.3;
 }
