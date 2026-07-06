@@ -1,3 +1,5 @@
+import { rabbitRange } from '../rabbitRange.js'
+
 function confClass(c) {
   if (c >= 70) return 'conf-high'
   if (c >= 40) return 'conf-mid'
@@ -14,7 +16,7 @@ export default function Header({ rabbits, confidence, explanation }) {
         <div className="header-stats">
           <div className="stat-block">
             <span className="stat-label">кроликов примерно</span>
-            <span className="stat-value rabbits-value">{rabbits.toFixed(1)}</span>
+            <span className="stat-value rabbits-value">{rabbitRange(rabbits)}</span>
           </div>
 
           <div className="stat-block">

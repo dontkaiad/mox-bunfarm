@@ -1,3 +1,5 @@
+import { rabbitRange } from '../rabbitRange.js'
+
 // Zone layout on the 440x310 SVG canvas
 const ZONES = [
   { id: 'Огород',   emoji: '🥕', x: 14,  y: 14,  w: 188, h: 130 },
@@ -117,7 +119,7 @@ export default function FarmMap({ byZone, events, activeZone, onZoneClick }) {
               fill="rgba(245,230,200,0.9)"
               style={{ pointerEvents: 'none' }}
             >
-              ~{est.toFixed(1)} 🐰
+              {rabbitRange(est)} 🐰
             </text>
 
             {/* Event count badge */}
