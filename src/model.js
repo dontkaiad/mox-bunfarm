@@ -97,9 +97,11 @@ export function calculateConfidence(events, params) {
   const avgIntensity =
     events.reduce((s, e) => s + e.intensity, 0) / events.length / 10
 
-  // Factor 3: consistency - 1 minus coefficient of variation across zones
+  // Factor 3: consistency - 1 minus coefficient of variation across zones.
+  // Use collapsed events so duplicate same-type+zone signals don't inflate one zone's weight.
+  const collapsed = collapseEvents(events, params)
   const zoneTotals = {}
-  for (const evt of events) {
+  for (const evt of collapsed) {
     zoneTotals[evt.location] =
       (zoneTotals[evt.location] ?? 0) + eventContribution(evt, params)
   }

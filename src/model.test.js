@@ -150,6 +150,20 @@ describe('calculateConfidence', () => {
       calculateConfidence(low, DEFAULT_PARAMS)
     )
   })
+
+  it('collapsed duplicates do not inflate one zone — consistency equals single-event baseline', () => {
+    // Two footprints in Огород within 60 min collapse to the winner.
+    // Loser has the same intensity as winner so raw avgIntensity stays equal,
+    // letting us isolate the consistency factor.
+    // A second zone (Теплица) provides the cross-zone comparison.
+    const winner = evt({ id: 'hi', location: 'Огород',  count: 2, intensity: 8, time: '10:00' })
+    const loser  = evt({ id: 'lo', location: 'Огород',  count: 1, intensity: 8, time: '10:30' })
+    const other  = evt({ id: 'ot', location: 'Теплица', count: 1, intensity: 8, time: '10:00' })
+
+    const withDuplicate   = calculateConfidence([winner, loser, other], DEFAULT_PARAMS)
+    const withoutDuplicate = calculateConfidence([winner, other],        DEFAULT_PARAMS)
+    expect(withDuplicate).toBe(withoutDuplicate)
+  })
 })
 
 describe('calculateContributions', () => {
