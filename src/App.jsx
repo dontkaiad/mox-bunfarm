@@ -16,6 +16,7 @@ import ZonePopup       from './components/ZonePopup.jsx'
 import Recommendations from './components/Recommendations.jsx'
 import Worklog            from './components/Worklog.jsx'
 import EstimateBreakdown  from './components/EstimateBreakdown.jsx'
+import ImportExport       from './components/ImportExport.jsx'
 import './App.css'
 
 const TABS = [
@@ -98,6 +99,12 @@ export default function App() {
     setEvents(prev => [...prev, evt])
   }
 
+  // ── Event import ─────────────────────────────────────────────────────────
+  function importEvents(newEvents) {
+    setEvents(newEvents)
+    setActiveZone(null)
+  }
+
   // ── Custom type registration ──────────────────────────────────────────────
   function addCustomType({ type, label, emoji, reliability, rpu }) {
     setCustomTypes(prev => [...prev, { type, label, emoji }])
@@ -174,6 +181,14 @@ export default function App() {
             hint={paramHint}
             eventMeta={allEventMeta}
             eventTypes={allEventTypes}
+          />
+          <ImportExport
+            events={events}
+            rabbits={rabbits}
+            confidence={confidence}
+            contributions={contributions}
+            byZone={byZone}
+            onImport={importEvents}
           />
         </div>
 

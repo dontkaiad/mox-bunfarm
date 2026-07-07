@@ -2,8 +2,10 @@ import asyncio
 import json
 import logging
 import os
+from typing import Any
 
 import anthropic
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -141,6 +143,33 @@ async def advise(req: AdviseRequest) -> dict:
     except Exception as exc:
         log.warning("Failed to parse LLM JSON: %s — raw: %.120s", exc, raw_text)
         return FALLBACK_RESPONSE
+
+
+class WebhookRequest(BaseModel):
+    url: str
+    report: Any  # JSON array or object forwarded as-is to the target URL
+
+
+@app.post("/api/webhook")
+async def webhook(req: WebhookRequest) -> dict:
+    if not req.url.startswith(("http://", "https://")):
+        return {"ok": False, "error": "URL должен начинаться с http:// или https://"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                req.url,
+                json=req.report,
+                headers={"Content-Type": "application/json"},
+            )
+        return {"ok": resp.status_code < 400, "status": resp.status_code}
+    except httpx.TimeoutException:
+        return {"ok": False, "error": "Таймаут соединения (10 с)"}
+    except httpx.ConnectError:
+        return {"ok": False, "error": "Хост недоступен"}
+    except Exception as exc:
+        log.warning("Webhook relay error: %s", exc)
+        return {"ok": False, "error": str(exc)[:120]}
 
 
 @app.get("/health")
