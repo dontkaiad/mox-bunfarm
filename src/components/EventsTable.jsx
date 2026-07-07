@@ -108,7 +108,10 @@ export default function EventsTable({ events, contributions, onUpdate, onDelete,
             <tr>
               <th>Сигнал</th>
               <th>Место</th>
-              <th>Время</th>
+              <th>
+                Время
+                <Tip text="Когда заметил след. Следы рядом по времени в одном месте считаются одним кроликом; в разных зонах — зависит от скорости перемещения." />
+              </th>
               <th title="Сколько раз замечено">Сколько</th>
               <th>
                 Заметность
