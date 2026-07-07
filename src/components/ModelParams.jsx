@@ -2,17 +2,14 @@ import { useState } from 'react'
 import { EVENT_META, EVENT_TYPES } from '../data.js'
 import Tip from './Tip.jsx'
 
-const RELIABILITY_PRESETS = [
-  { label: 'слабо',  value: 0.3 },
-  { label: 'средне', value: 0.6 },
-  { label: 'сильно', value: 0.9 },
-]
+// Reliability: stored 0–1, slider 1–10 (0.3→3, 0.6→6, 0.9→9)
+const relToSlider  = v => Math.max(1, Math.min(10, Math.round(v * 10)))
+const sliderToRel  = v => v / 10
 
-const RPU_PRESETS = [
-  { label: 'мало',   value: 0.3 },
-  { label: 'средне', value: 1.0 },
-  { label: 'много',  value: 2.0 },
-]
+// RabbitsPerUnit: stored 0.3–2.0, slider 1–10 (0.3→1, ≈1.0→5, 2.0→10)
+const RPU_MIN = 0.3, RPU_SPAN = 1.7
+const rpuToSlider  = v => Math.max(1, Math.min(10, Math.round((v - RPU_MIN) / RPU_SPAN * 9 + 1)))
+const sliderToRpu  = v => RPU_MIN + (v - 1) / 9 * RPU_SPAN
 
 const MOVEMENT_PRESETS = [
   { label: 'медленно', value: 60 },
@@ -43,6 +40,20 @@ function PresetGroup({ presets, current, onSelect }) {
   )
 }
 
+function ParamSlider({ value, onChange, toSlider, fromSlider }) {
+  const sv = toSlider(value)
+  return (
+    <div className="param-slider-row">
+      <input
+        type="range" min={1} max={10} step={1}
+        value={sv}
+        onChange={e => onChange(fromSlider(+e.target.value))}
+      />
+      <span className="param-slider-val">{sv}</span>
+    </div>
+  )
+}
+
 export default function ModelParams({ params, onUpdate, hint }) {
   const [open, setOpen] = useState(true)
 
@@ -55,7 +66,7 @@ export default function ModelParams({ params, onUpdate, hint }) {
 
       {open && (
         <div className="model-params-body">
-          {/* Movement window — global param */}
+          {/* Movement window — categorical, stays as 3-preset */}
           <div className="param-block">
             <div className="param-type-label">
               🏃 Скорость перемещения{' '}
@@ -71,7 +82,7 @@ export default function ModelParams({ params, onUpdate, hint }) {
             )}
           </div>
 
-          {/* Per-signal-type params */}
+          {/* Per-signal-type sliders */}
           {EVENT_TYPES.map(type => {
             const meta = EVENT_META[type]
             const showHint = hint && (
@@ -86,20 +97,22 @@ export default function ModelParams({ params, onUpdate, hint }) {
                   Доверие к сигналу{' '}
                   <Tip text="Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу." />
                 </div>
-                <PresetGroup
-                  presets={RELIABILITY_PRESETS}
-                  current={params.reliability[type]}
-                  onSelect={v => onUpdate('reliability', type, v)}
+                <ParamSlider
+                  value={params.reliability[type]}
+                  onChange={v => onUpdate('reliability', type, v)}
+                  toSlider={relToSlider}
+                  fromSlider={sliderToRel}
                 />
 
                 <div className="param-row-label">
                   Кроликов за сигнал{' '}
                   <Tip text="Сколько кроликов стоит за одним таким следом. «Много» — кролики ходят группами." />
                 </div>
-                <PresetGroup
-                  presets={RPU_PRESETS}
-                  current={params.rabbitsPerUnit[type]}
-                  onSelect={v => onUpdate('rabbitsPerUnit', type, v)}
+                <ParamSlider
+                  value={params.rabbitsPerUnit[type]}
+                  onChange={v => onUpdate('rabbitsPerUnit', type, v)}
+                  toSlider={rpuToSlider}
+                  fromSlider={sliderToRpu}
                 />
 
                 {showHint && <div className="param-hint">💡 {hint.text}</div>}
