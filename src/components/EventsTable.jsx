@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { LOCATIONS } from '../data.js'
 import Tip from './Tip.jsx'
+import Dropdown from './Dropdown.jsx'
 
 const relToSlider  = v => Math.max(1, Math.min(10, Math.round(v * 10)))
 const sliderToRel  = v => v / 10
@@ -100,6 +101,20 @@ function EventForm({ initial, onSave, onCancel, onDelete, isNew, allEventMeta, a
   const [customTypePending, setCustomTypePending] = useState(false)
   const set = (f, v) => setDraft(p => ({ ...p, [f]: v }))
 
+  const typeOptions = useMemo(() => [
+    ...allEventTypes.map(t => ({
+      value: t,
+      label: allEventMeta[t]?.label ?? t,
+      emoji: allEventMeta[t]?.emoji ?? '',
+    })),
+    { divider: true },
+    { value: SENTINEL_NEW, label: 'Свой тип…', emoji: '➕' },
+  ], [allEventTypes, allEventMeta])
+
+  const locationOptions = useMemo(() =>
+    LOCATIONS.map(l => ({ value: l, label: l }))
+  , [])
+
   function handleTypeChange(value) {
     if (value === SENTINEL_NEW) {
       setCustomTypePending(true)
@@ -119,27 +134,22 @@ function EventForm({ initial, onSave, onCancel, onDelete, isNew, allEventMeta, a
   return (
     <div className="evt-form">
       <div className="evt-form-grid">
-        <label className="evt-form-field">
+        <div className="evt-form-field">
           <span>Тип сигнала</span>
-          <select
+          <Dropdown
+            options={typeOptions}
             value={customTypePending ? SENTINEL_NEW : draft.event}
-            onChange={e => handleTypeChange(e.target.value)}
-          >
-            {allEventTypes.map(t => (
-              <option key={t} value={t}>
-                {allEventMeta[t]?.emoji} {allEventMeta[t]?.label ?? t}
-              </option>
-            ))}
-            <option disabled>──────────</option>
-            <option value={SENTINEL_NEW}>➕ Свой тип…</option>
-          </select>
-        </label>
-        <label className="evt-form-field">
+            onChange={handleTypeChange}
+          />
+        </div>
+        <div className="evt-form-field">
           <span>Место</span>
-          <select value={draft.location} onChange={e => set('location', e.target.value)}>
-            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </label>
+          <Dropdown
+            options={locationOptions}
+            value={draft.location}
+            onChange={v => set('location', v)}
+          />
+        </div>
         <label className="evt-form-field">
           <span>Время</span>
           <input type="time" value={draft.time} onChange={e => set('time', e.target.value)} />
