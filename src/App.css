@@ -141,12 +141,12 @@
   font-size: 0.8rem;
 }
 /* col widths sum to 100% */
-.events-table col.c-signal   { width: 38%; }
-.events-table col.c-location { width: 18%; }
+.events-table col.c-signal   { width: 27%; }
+.events-table col.c-location { width: 14%; }
+.events-table col.c-time     { width: 12%; }
 .events-table col.c-count    { width: 10%; }
-.events-table col.c-intensity{ width: 18%; }
-.events-table col.c-pct      { width:  9%; }
-.events-table col.c-del      { width:  7%; }
+.events-table col.c-intensity{ width: 17%; }
+.events-table col.c-pct      { width: 20%; }
 
 .events-table th {
   background: rgba(92,51,25,0.12);
@@ -157,6 +157,8 @@
   text-align: left;
   border-bottom: 2px solid var(--panel-border);
   white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
   line-height: 1.2;
   overflow: hidden;
 }
@@ -188,6 +190,110 @@
 
 .evt-emoji { font-size: 1rem; }
 
+/* ── Events intro & read-only row cells ── */
+.events-intro {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.evt-row { cursor: pointer; }
+.evt-row-open td { background: rgba(92,51,25,0.08); }
+
+.evt-time {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.evt-num {
+  font-size: 0.82rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ── Inline edit form ── */
+.evt-edit-row td {
+  padding: 0;
+  border-bottom: 2px solid var(--panel-border);
+}
+
+.evt-form {
+  padding: 10px 12px 12px;
+  background: rgba(245,230,200,0.3);
+}
+
+.evt-form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 10px;
+}
+
+.evt-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex: 1 1 90px;
+  min-width: 80px;
+}
+
+.evt-form-field span {
+  line-height: 1.3;
+}
+
+.evt-form-field input,
+.evt-form-field select {
+  font-size: 0.9rem;
+  padding: 3px 5px;
+  font-family: var(--font);
+  background: rgba(245,230,200,0.5);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 2px;
+}
+
+.evt-form-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.evt-new-wrap {
+  margin-top: 8px;
+  border: 1px dashed var(--panel-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* ── "?" tooltip badge ── */
+.tip {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(92,51,25,0.15);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-align: center;
+  line-height: 12px;
+  cursor: help;
+  text-decoration: none;
+  margin-left: 3px;
+  vertical-align: middle;
+  font-style: normal;
+}
+.tip:hover {
+  background: rgba(232,160,32,0.3);
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .inline-num {
   width: 100%;
   min-width: 0;
@@ -210,26 +316,6 @@
   title: "Событие схлопнуто — учтён более сильный сигнал";
 }
 
-/* Add-event row */
-.add-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
-  padding: 6px 0 2px;
-  border-top: 1px dashed var(--panel-border);
-}
-
-.add-row select,
-.add-row input {
-  font-size: 0.9rem;
-  padding: 3px 5px;
-}
-
-.add-row select.sel-type { max-width: 140px; }
-.add-row select.sel-loc  { max-width: 100px; }
-.add-row input.inp-num   { width: 46px; }
-.add-row input.inp-time  { width: 80px; }
 
 /* ── Model params: preset buttons ── */
 .param-preset-group {

@@ -1,140 +1,189 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { EVENT_META, EVENT_TYPES, LOCATIONS } from '../data.js'
+import Tip from './Tip.jsx'
 
 const BLANK = { event: 'footprints', location: 'Огород', count: 1, intensity: 5, time: '12:00' }
 
-export default function EventsTable({ events, contributions, onUpdate, onDelete, onAdd }) {
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState(BLANK)
+function EventForm({ initial, onSave, onCancel, onDelete, isNew }) {
+  const [draft, setDraft] = useState({ ...initial })
+  const set = (f, v) => setDraft(p => ({ ...p, [f]: v }))
 
+  return (
+    <div className="evt-form">
+      <div className="evt-form-grid">
+        <label className="evt-form-field">
+          <span>Тип сигнала</span>
+          <select value={draft.event} onChange={e => set('event', e.target.value)}>
+            {EVENT_TYPES.map(t => (
+              <option key={t} value={t}>{EVENT_META[t].emoji} {EVENT_META[t].label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="evt-form-field">
+          <span>Место</span>
+          <select value={draft.location} onChange={e => set('location', e.target.value)}>
+            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </label>
+        <label className="evt-form-field">
+          <span>Время</span>
+          <input type="time" value={draft.time} onChange={e => set('time', e.target.value)} />
+        </label>
+        <label className="evt-form-field">
+          <span>Сколько раз</span>
+          <input
+            type="number" min={1} max={20}
+            value={draft.count}
+            onChange={e => set('count', Math.max(1, +e.target.value || 1))}
+          />
+        </label>
+        <label className="evt-form-field">
+          <span>
+            Заметность (1–10){' '}
+            <Tip text="Насколько чёткий след ты видишь. Явную улику система учитывает сильнее смутного намёка." />
+          </span>
+          <input
+            type="number" min={1} max={10}
+            value={draft.intensity}
+            onChange={e => set('intensity', Math.min(10, Math.max(1, +e.target.value || 1)))}
+          />
+        </label>
+      </div>
+      <div className="evt-form-actions">
+        <button className="btn-primary" onClick={() => onSave(draft)}>
+          {isNew ? '✓ Добавить' : '✓ Сохранить'}
+        </button>
+        <button className="btn-ghost" onClick={onCancel}>Отмена</button>
+        {!isNew && onDelete && (
+          <button className="btn-danger" onClick={onDelete} style={{ marginLeft: 'auto' }}>
+            Удалить
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function EventsTable({ events, contributions, onUpdate, onDelete, onAdd }) {
+  const [editingId, setEditingId] = useState(null) // null | evt.id | 'new'
   const pctMap = Object.fromEntries(contributions.map(c => [c.id, c.percent]))
 
-  function handleAdd() {
-    const id = `evt_${Date.now()}`
-    onAdd({ ...draft, id })
-    setAdding(false)
-    setDraft(BLANK)
+  function handleSaveEdit(id, draft) {
+    const original = events.find(e => e.id === id)
+    if (!original) return
+    for (const field of ['event', 'location', 'time', 'count', 'intensity']) {
+      if (draft[field] !== original[field]) onUpdate(id, field, draft[field])
+    }
+    setEditingId(null)
   }
 
-  function setDraftField(field, value) {
-    setDraft(prev => ({ ...prev, [field]: value }))
+  function handleSaveNew(draft) {
+    onAdd({ ...draft, id: `evt_${Date.now()}` })
+    setEditingId(null)
+  }
+
+  function handleDelete(id) {
+    onDelete(id)
+    setEditingId(null)
   }
 
   return (
     <div>
       <div className="section-title">📋 Сигналы ({events.length})</div>
+      <div className="events-intro">
+        Здесь ты записываешь, что заметил на ферме. Система по этим следам оценивает кроликов.
+      </div>
 
       <div className="events-scroll">
         <table className="events-table">
           <colgroup>
             <col className="c-signal" />
             <col className="c-location" />
+            <col className="c-time" />
             <col className="c-count" />
             <col className="c-intensity" />
             <col className="c-pct" />
-            <col className="c-del" />
           </colgroup>
           <thead>
             <tr>
               <th>Сигнал</th>
               <th>Место</th>
+              <th>Время</th>
               <th title="Сколько раз замечено">Сколько</th>
-              <th title="Заметность: 1 — едва видно, 10 — очень ярко">Заметность</th>
-              <th title="Вклад в общую оценку">вклад</th>
-              <th></th>
+              <th>
+                Заметность
+                <Tip text="Заметность следа: 1 — едва видно, 10 — очень ярко. Явную улику система учитывает сильнее." />
+              </th>
+              <th>
+                вклад
+                <Tip text="Какую долю итоговой оценки даёт этот сигнал. Схлопнутые дубли показывают —." />
+              </th>
             </tr>
           </thead>
           <tbody>
             {events.map(evt => {
-              const pct = pctMap[evt.id] ?? 0
-              const meta = EVENT_META[evt.event]
+              const pct    = pctMap[evt.id] ?? 0
+              const meta   = EVENT_META[evt.event]
+              const isOpen = editingId === evt.id
               return (
-                <tr key={evt.id}>
-                  <td>
-                    <span className="event-type-cell">
-                      <span className="evt-emoji">{meta?.emoji}</span>
-                      <span>{meta?.label}</span>
-                    </span>
-                  </td>
-                  <td>{evt.location}</td>
-                  <td>
-                    <input
-                      className="inline-num"
-                      type="number" min={1} max={20}
-                      value={evt.count}
-                      onChange={e => onUpdate(evt.id, 'count', Math.max(1, +e.target.value))}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="inline-num"
-                      type="number" min={1} max={10}
-                      value={evt.intensity}
-                      onChange={e => onUpdate(evt.id, 'intensity', Math.min(10, Math.max(1, +e.target.value)))}
-                    />
-                  </td>
-                  <td>
-                    <span className={`pct-badge${pct >= 25 ? ' hot' : ''}`}>
-                      {pct > 0 ? `${pct}%` : <span className="collapsed-badge" title="Схлопнуто">—</span>}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="btn-danger" onClick={() => onDelete(evt.id)} title="Удалить">✕</button>
-                  </td>
-                </tr>
+                <React.Fragment key={evt.id}>
+                  <tr
+                    className={`evt-row${isOpen ? ' evt-row-open' : ''}`}
+                    onClick={() => setEditingId(isOpen ? null : evt.id)}
+                    title="Нажми, чтобы изменить"
+                  >
+                    <td>
+                      <span className="event-type-cell">
+                        <span className="evt-emoji">{meta?.emoji}</span>
+                        <span>{meta?.label}</span>
+                      </span>
+                    </td>
+                    <td>{evt.location}</td>
+                    <td className="evt-time">{evt.time}</td>
+                    <td className="evt-num">×{evt.count}</td>
+                    <td className="evt-num">⚡{evt.intensity}</td>
+                    <td>
+                      <span className={`pct-badge${pct >= 25 ? ' hot' : ''}`}>
+                        {pct > 0
+                          ? `${pct}%`
+                          : <span className="collapsed-badge" title="Схлопнуто">—</span>}
+                      </span>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="evt-edit-row">
+                      <td colSpan={6}>
+                        <EventForm
+                          initial={evt}
+                          onSave={draft => handleSaveEdit(evt.id, draft)}
+                          onCancel={() => setEditingId(null)}
+                          onDelete={() => handleDelete(evt.id)}
+                          isNew={false}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               )
             })}
           </tbody>
         </table>
       </div>
 
-      {adding ? (
-        <div className="add-row">
-          <select
-            className="sel-type"
-            value={draft.event}
-            onChange={e => setDraftField('event', e.target.value)}
-          >
-            {EVENT_TYPES.map(t => (
-              <option key={t} value={t}>{EVENT_META[t].emoji} {EVENT_META[t].label}</option>
-            ))}
-          </select>
-
-          <select
-            className="sel-loc"
-            value={draft.location}
-            onChange={e => setDraftField('location', e.target.value)}
-          >
-            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-
-          <input
-            className="inp-num"
-            type="number" min={1} max={20}
-            value={draft.count} placeholder="кол."
-            onChange={e => setDraftField('count', +e.target.value)}
+      {editingId === 'new' ? (
+        <div className="evt-new-wrap">
+          <EventForm
+            initial={BLANK}
+            onSave={handleSaveNew}
+            onCancel={() => setEditingId(null)}
+            isNew={true}
           />
-          <input
-            className="inp-num"
-            type="number" min={1} max={10}
-            value={draft.intensity} placeholder="инт."
-            onChange={e => setDraftField('intensity', +e.target.value)}
-          />
-          <input
-            className="inp-time"
-            type="time"
-            value={draft.time}
-            onChange={e => setDraftField('time', e.target.value)}
-          />
-
-          <button className="btn-primary" onClick={handleAdd}>✓ Добавить</button>
-          <button className="btn-ghost"   onClick={() => { setAdding(false); setDraft(BLANK) }}>✕</button>
         </div>
       ) : (
         <button
           className="btn-primary"
           style={{ marginTop: 8 }}
-          onClick={() => setAdding(true)}
+          onClick={() => setEditingId('new')}
         >
           + Добавить сигнал
         </button>
