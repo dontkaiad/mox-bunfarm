@@ -21,8 +21,8 @@ import './App.css'
 
 const TABS = [
   { id: 'map',       label: '🗺️ Карта' },
-  { id: 'breakdown', label: '🔍 Разбор оценки' },
   { id: 'recs',      label: '📋 Рекомендации' },
+  { id: 'breakdown', label: '🔍 Разбор оценки' },
   { id: 'worklog',   label: '🤖 AI Журнал' },
 ]
 

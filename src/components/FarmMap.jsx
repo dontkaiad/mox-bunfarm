@@ -21,10 +21,14 @@ function heatColor(value, max) {
 export default function FarmMap({ byZone, events, activeZone, onZoneClick }) {
   const max = Math.max(...Object.values(byZone), 0.001)
 
-  // Event count per zone for the badge
-  const evtCount = {}
+  // Event count and last signal time per zone
+  const evtCount      = {}
+  const lastSignalTime = {}
   for (const e of events) {
     evtCount[e.location] = (evtCount[e.location] ?? 0) + 1
+    if (!lastSignalTime[e.location] || e.time > lastSignalTime[e.location]) {
+      lastSignalTime[e.location] = e.time
+    }
   }
 
   return (
@@ -61,12 +65,13 @@ export default function FarmMap({ byZone, events, activeZone, onZoneClick }) {
 
       {/* Zones */}
       {ZONES.map(z => {
-        const est    = byZone[z.id] ?? 0
-        const fill   = heatColor(est, max)
-        const active = activeZone === z.id
-        const count  = evtCount[z.id] ?? 0
-        const cx     = z.x + z.w / 2
-        const cy     = z.y + z.h / 2
+        const est      = byZone[z.id] ?? 0
+        const fill     = heatColor(est, max)
+        const active   = activeZone === z.id
+        const count    = evtCount[z.id] ?? 0
+        const lastTime = lastSignalTime[z.id] ?? null
+        const cx       = z.x + z.w / 2
+        const cy       = z.y + z.h / 2
 
         return (
           <g key={z.id} className="zone-g" onClick={() => onZoneClick(z.id)}>
@@ -111,16 +116,35 @@ export default function FarmMap({ byZone, events, activeZone, onZoneClick }) {
               {z.emoji}
             </text>
 
-            {/* Rabbit estimate */}
-            <text
-              x={cx} y={z.y + z.h - 14}
-              textAnchor="middle"
-              fontFamily="VT323, monospace" fontSize="13"
-              fill="rgba(245,230,200,0.9)"
-              style={{ pointerEvents: 'none' }}
-            >
-              {rabbitRange(est)} 🐰
-            </text>
+            {/* Rabbit estimate + last signal time */}
+            <g>
+              <title>Оценка по всем записанным следам в этой зоне, не текущий момент.</title>
+              {/* Transparent hit-area so the <title> tooltip fires on hover */}
+              <rect
+                x={z.x + 8} y={z.y + z.h - 38} width={z.w - 16} height={34}
+                fill="transparent" style={{ cursor: 'help' }}
+              />
+              <text
+                x={cx} y={lastTime ? z.y + z.h - 24 : z.y + z.h - 14}
+                textAnchor="middle"
+                fontFamily="VT323, monospace" fontSize="13"
+                fill="rgba(245,230,200,0.9)"
+                style={{ pointerEvents: 'none' }}
+              >
+                {rabbitRange(est)} 🐰
+              </text>
+              {lastTime && (
+                <text
+                  x={cx} y={z.y + z.h - 10}
+                  textAnchor="middle"
+                  fontFamily="VT323, monospace" fontSize="11"
+                  fill="rgba(245,230,200,0.6)"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  последний след {lastTime}
+                </text>
+              )}
+            </g>
 
             {/* Event count badge */}
             {count > 0 && (

@@ -30,6 +30,9 @@ export default function Header({ rabbits, confidence, explanation }) {
       {explanation && (
         <div className="header-explanation">{explanation}</div>
       )}
+      <div className="header-attribution">
+        Тестовое задание AI-first Developer · MOX · Карина Ларк
+      </div>
     </header>
   )
 }
