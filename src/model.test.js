@@ -300,3 +300,75 @@ describe('calculateByZone', () => {
     expect(byZone['Огород']).toBeCloseTo(hiScore)
   })
 })
+
+describe('custom signal types', () => {
+  it('eventContribution uses explicit custom params', () => {
+    const customParams = {
+      ...DEFAULT_PARAMS,
+      rabbitsPerUnit: { ...DEFAULT_PARAMS.rabbitsPerUnit, my_type: 1.5 },
+      reliability:    { ...DEFAULT_PARAMS.reliability,    my_type: 0.7 },
+    }
+    const e = evt({ event: 'my_type', count: 2, intensity: 8 })
+    // 2 * 1.5 * 0.7 * 0.8 = 1.68
+    expect(eventContribution(e, customParams)).toBeCloseTo(1.68)
+  })
+
+  it('eventContribution falls back to rpu=1, reliability=0.5 for unknown type', () => {
+    const e = evt({ event: 'unknown_custom', count: 1, intensity: 10 })
+    // 1 * 1 * 0.5 * 1.0 = 0.5
+    expect(eventContribution(e, DEFAULT_PARAMS)).toBeCloseTo(0.5)
+  })
+
+  it('calculateRabbits flows custom type through the full pipeline', () => {
+    const customParams = {
+      ...DEFAULT_PARAMS,
+      rabbitsPerUnit: { ...DEFAULT_PARAMS.rabbitsPerUnit, custom_x: 2.0 },
+      reliability:    { ...DEFAULT_PARAMS.reliability,    custom_x: 0.8 },
+    }
+    const events = [
+      evt({ id: 'a', event: 'custom_x', location: 'Огород', count: 1, intensity: 10, time: '10:00' }),
+    ]
+    // 1 * 2.0 * 0.8 * 1.0 = 1.6
+    expect(calculateRabbits(events, customParams)).toBeCloseTo(1.6)
+  })
+
+  it('calculateContributions percentages sum to ~100 with a custom type', () => {
+    const customParams = {
+      ...DEFAULT_PARAMS,
+      rabbitsPerUnit: { ...DEFAULT_PARAMS.rabbitsPerUnit, custom_y: 1.0 },
+      reliability:    { ...DEFAULT_PARAMS.reliability,    custom_y: 1.0 },
+    }
+    const events = [
+      evt({ id: 'a', event: 'custom_y',   location: 'Огород',  count: 1, intensity: 10, time: '10:00' }),
+      evt({ id: 'b', event: 'footprints', location: 'Теплица', count: 1, intensity: 10, time: '10:00' }),
+    ]
+    const contribs = calculateContributions(events, customParams)
+    const total = contribs.reduce((s, c) => s + c.percent, 0)
+    expect(Math.abs(total - 100)).toBeLessThanOrEqual(2)
+  })
+
+  it('calculateConfidence knownTypeCount scales diversity — more known types lowers score', () => {
+    const events = [
+      evt({ id: 'a', event: 'footprints',    location: 'Огород',  intensity: 10 }),
+      evt({ id: 'b', event: 'motion_sensor', location: 'Теплица', intensity: 10 }),
+    ]
+    // 2 unique types out of 5 vs out of 10: higher denominator = lower diversity = lower confidence
+    const conf5  = calculateConfidence(events, DEFAULT_PARAMS, 5)
+    const conf10 = calculateConfidence(events, DEFAULT_PARAMS, 10)
+    expect(conf5).toBeGreaterThan(conf10)
+  })
+
+  it('custom type collapses correctly with same type+location rule', () => {
+    const customParams = {
+      ...DEFAULT_PARAMS,
+      rabbitsPerUnit: { ...DEFAULT_PARAMS.rabbitsPerUnit, my_sign: 1.0 },
+      reliability:    { ...DEFAULT_PARAMS.reliability,    my_sign: 1.0 },
+    }
+    const events = [
+      evt({ id: 'lo', event: 'my_sign', location: 'Огород', count: 1, intensity: 3, time: '10:00' }),
+      evt({ id: 'hi', event: 'my_sign', location: 'Огород', count: 1, intensity: 9, time: '10:30' }),
+    ]
+    const hiScore = eventContribution(events[1], customParams)
+    expect(calculateRabbits(events, customParams)).toBeCloseTo(hiScore)
+  })
+})

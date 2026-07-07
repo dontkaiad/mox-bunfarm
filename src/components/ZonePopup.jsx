@@ -1,7 +1,6 @@
-import { EVENT_META } from '../data.js'
 import { rabbitRange } from '../rabbitRange.js'
 
-export default function ZonePopup({ zone, events, estimate, contributions, onClose }) {
+export default function ZonePopup({ zone, events, estimate, contributions, onClose, eventMeta }) {
   const pctMap = Object.fromEntries(contributions.map(c => [c.id, c.percent]))
 
   return (
@@ -20,7 +19,7 @@ export default function ZonePopup({ zone, events, estimate, contributions, onClo
       ) : (
         <ul className="popup-events">
           {events.map(evt => {
-            const meta = EVENT_META[evt.event]
+            const meta = eventMeta?.[evt.event]
             const pct  = pctMap[evt.id] ?? 0
             return (
               <li key={evt.id} className="popup-evt-row">

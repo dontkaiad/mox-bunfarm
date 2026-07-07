@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { EVENT_META, EVENT_TYPES } from '../data.js'
 import Tip from './Tip.jsx'
 
 // Reliability: stored 0–1, slider 1–10 (0.3→3, 0.6→6, 0.9→9)
@@ -54,7 +53,7 @@ function ParamSlider({ value, onChange, toSlider, fromSlider }) {
   )
 }
 
-export default function ModelParams({ params, onUpdate, hint }) {
+export default function ModelParams({ params, onUpdate, hint, eventMeta, eventTypes }) {
   const [open, setOpen] = useState(true)
 
   return (
@@ -83,8 +82,8 @@ export default function ModelParams({ params, onUpdate, hint }) {
           </div>
 
           {/* Per-signal-type sliders */}
-          {EVENT_TYPES.map(type => {
-            const meta = EVENT_META[type]
+          {eventTypes.map(type => {
+            const meta = eventMeta[type]
             const showHint = hint && (
               hint.target === `reliability.${type}` ||
               hint.target === `rabbitsPerUnit.${type}`

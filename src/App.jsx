@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { INITIAL_EVENTS, EVENT_META } from './data.js'
+import { INITIAL_EVENTS, EVENT_META, EVENT_TYPES } from './data.js'
 import {
   DEFAULT_PARAMS,
   calculateRabbits,
@@ -26,27 +26,38 @@ const TABS = [
 ]
 
 const HINT_THRESHOLD   = 0.05
-const ADVISE_DEBOUNCE  = 800  // ms — avoids a call on every keystroke
+const ADVISE_DEBOUNCE  = 800
 
 export default function App() {
-  const [events,     setEvents]     = useState(INITIAL_EVENTS)
-  const [params,     setParams]     = useState(DEFAULT_PARAMS)
-  const [activeZone, setActiveZone] = useState(null)
-  const [activeTab,  setActiveTab]  = useState('map')
-  const [paramHint,  setParamHint]  = useState(null)
-
-  // LLM response: {source, recommendations, explanation} | null (null → use JS fallbacks)
-  const [llmData, setLlmData] = useState(null)
+  const [events,      setEvents]      = useState(INITIAL_EVENTS)
+  const [params,      setParams]      = useState(DEFAULT_PARAMS)
+  const [customTypes, setCustomTypes] = useState([])
+  const [activeZone,  setActiveZone]  = useState(null)
+  const [activeTab,   setActiveTab]   = useState('map')
+  const [paramHint,   setParamHint]   = useState(null)
+  const [llmData,     setLlmData]     = useState(null)
 
   const hintTimerRef   = useRef(null)
   const adviseTimerRef = useRef(null)
 
-  const rabbits       = useMemo(() => calculateRabbits(events, params),        [events, params])
-  const confidence    = useMemo(() => calculateConfidence(events, params),     [events, params])
-  const contributions = useMemo(() => calculateContributions(events, params),  [events, params])
-  const byZone        = useMemo(() => calculateByZone(events, params),         [events, params])
+  // Merge built-in types with user-created custom types
+  const allEventMeta = useMemo(() => {
+    const custom = Object.fromEntries(
+      customTypes.map(ct => [ct.type, { label: ct.label, emoji: ct.emoji }])
+    )
+    return { ...EVENT_META, ...custom }
+  }, [customTypes])
 
-  // Header subtitle — pure JS, instant, no network. LLM explanation path removed.
+  const allEventTypes = useMemo(
+    () => [...EVENT_TYPES, ...customTypes.map(ct => ct.type)],
+    [customTypes]
+  )
+
+  const rabbits       = useMemo(() => calculateRabbits(events, params),                              [events, params])
+  const confidence    = useMemo(() => calculateConfidence(events, params, allEventTypes.length),     [events, params, allEventTypes])
+  const contributions = useMemo(() => calculateContributions(events, params),                        [events, params])
+  const byZone        = useMemo(() => calculateByZone(events, params),                              [events, params])
+
   const explanation = useMemo(
     () => buildSubtitle(rabbits, byZone, events, params),
     [rabbits, byZone, events, params]
@@ -87,6 +98,16 @@ export default function App() {
     setEvents(prev => [...prev, evt])
   }
 
+  // ── Custom type registration ──────────────────────────────────────────────
+  function addCustomType({ type, label, emoji, reliability, rpu }) {
+    setCustomTypes(prev => [...prev, { type, label, emoji }])
+    setParams(prev => ({
+      ...prev,
+      rabbitsPerUnit: { ...prev.rabbitsPerUnit, [type]: rpu },
+      reliability:    { ...prev.reliability,    [type]: reliability },
+    }))
+  }
+
   // ── Param update with live hint ───────────────────────────────────────────
   function updateParam(category, type, value) {
     const newParams = type !== null
@@ -103,10 +124,10 @@ export default function App() {
         subject = 'поправка на перемещение изменилась'
       } else if (category === 'reliability') {
         const verb = diff > 0 ? 'сильнее' : 'слабее'
-        const label = EVENT_META[type]?.label?.toLowerCase() ?? type
+        const label = allEventMeta[type]?.label?.toLowerCase() ?? type
         subject = `${label} — теперь верим ${verb}`
       } else {
-        const label = EVENT_META[type]?.label?.toLowerCase() ?? type
+        const label = allEventMeta[type]?.label?.toLowerCase() ?? type
         subject = `вес за ${label} изменён`
       }
       const target = type !== null ? `${category}.${type}` : category
@@ -142,9 +163,18 @@ export default function App() {
               onUpdate={updateEvent}
               onDelete={deleteEvent}
               onAdd={addEvent}
+              allEventMeta={allEventMeta}
+              allEventTypes={allEventTypes}
+              onAddCustomType={addCustomType}
             />
           </div>
-          <ModelParams params={params} onUpdate={updateParam} hint={paramHint} />
+          <ModelParams
+            params={params}
+            onUpdate={updateParam}
+            hint={paramHint}
+            eventMeta={allEventMeta}
+            eventTypes={allEventTypes}
+          />
         </div>
 
         <div className="right-area">
@@ -176,6 +206,7 @@ export default function App() {
                     estimate={byZone[activeZone] ?? 0}
                     contributions={contributions}
                     onClose={() => setActiveZone(null)}
+                    eventMeta={allEventMeta}
                   />
                 )}
               </div>
@@ -187,7 +218,6 @@ export default function App() {
                 confidence={confidence}
                 events={events}
                 byZone={byZone}
-                contributions={contributions}
                 llmRecs={llmRecs}
               />
             )}
@@ -199,6 +229,7 @@ export default function App() {
                 contributions={contributions}
                 events={events}
                 params={params}
+                eventMeta={allEventMeta}
               />
             )}
 
