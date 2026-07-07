@@ -7,7 +7,7 @@ import {
   calculateContributions,
   calculateByZone,
 } from './model.js'
-import { buildFallbackExplanation } from './explainer.js'
+import { buildSubtitle } from './explainer.js'
 import Header          from './components/Header.jsx'
 import EventsTable     from './components/EventsTable.jsx'
 import ModelParams     from './components/ModelParams.jsx'
@@ -46,12 +46,13 @@ export default function App() {
   const contributions = useMemo(() => calculateContributions(events, params),  [events, params])
   const byZone        = useMemo(() => calculateByZone(events, params),         [events, params])
 
-  const explanation = useMemo(() => {
-    if (llmData?.source === 'llm' && llmData.explanation) return llmData.explanation
-    return buildFallbackExplanation(rabbits, contributions, events, params)
-  }, [llmData, rabbits, contributions, events, params])
+  // Header subtitle — pure JS, instant, no network. LLM explanation path removed.
+  const explanation = useMemo(
+    () => buildSubtitle(rabbits, byZone, events, params),
+    [rabbits, byZone, events, params]
+  )
 
-  // ── /api/advise with debounce ─────────────────────────────────────────────
+  // ── /api/advise — fires only when observations change, not per slider tick ──
   useEffect(() => {
     clearTimeout(adviseTimerRef.current)
     adviseTimerRef.current = setTimeout(() => {
@@ -68,10 +69,8 @@ export default function App() {
     }, ADVISE_DEBOUNCE)
 
     return () => clearTimeout(adviseTimerRef.current)
-  // Stable primitives in deps; object refs (contributions/byZone) are new each render
-  // but that's intentional — we want a fresh call whenever the model output changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rabbits, confidence, events, params])
+  }, [events])
 
   // ── Event CRUD ────────────────────────────────────────────────────────────
   function updateEvent(id, field, value) {

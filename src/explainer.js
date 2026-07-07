@@ -1,63 +1,74 @@
 import { EVENT_META } from './data.js'
 
-// Threshold below which a signal's reliability is considered "weak" in the explanation
-const WEAK_RELIABILITY_THRESHOLD = 0.4
+// Prepositional/locative form — used with "наследили ..."
+const ZONE_LOCATIVE = {
+  'Огород':   'в огороде',
+  'У забора': 'у забора',
+  'Сарай':    'в сарае',
+  'Теплица':  'в теплице',
+}
 
-// Builds a plain-language sentence explaining the current estimate.
-//
-// Architecture note: Phase 3 will call POST /api/advise and use the LLM's
-// response as `explanation` instead. This function is the fallback when the
-// API is unavailable or hasn't responded yet. Keep the signature stable so
-// the caller (App.jsx) can swap the source without restructuring.
-//
-// Returns a string (never null), always in Russian.
-export function buildFallbackExplanation(rabbits, contributions, events, params) {
-  if (events.length === 0) {
-    return 'Нет данных — добавьте первые наблюдения.'
+// Dative form — used with "не верим"
+const SIGNAL_DATIVE = {
+  missing_carrot:  'морковке',
+  new_hole:        'ямкам',
+  motion_sensor:   'датчику движения',
+  rustle_detected: 'шуршанию',
+  footprints:      'следам',
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1) }
+
+function countSentence(rabbits) {
+  if (rabbits < 0.3) return 'Следов пока мало.'
+  const lo = Math.max(1, Math.floor(rabbits))
+  const hi = Math.ceil(rabbits)
+  if (lo === hi) {
+    const word = lo === 1 ? 'кролик' : lo <= 4 ? 'кролика' : 'кроликов'
+    return `Около ${lo} ${word}.`
   }
+  return `Около ${lo}–${hi} кроликов.`
+}
 
-  const evtMap = Object.fromEntries(events.map(e => [e.id, e]))
+// Instant JS subtitle for the header — built from computed data, never calls the network.
+// Correct Russian case forms are pre-declared; no naive concatenation.
+export function buildSubtitle(rabbits, byZone, events, params) {
+  const parts = [countSentence(rabbits)]
 
-  const active = contributions
-    .filter(c => c.percent > 0)
-    .sort((a, b) => b.percent - a.percent)
+  if (events.length === 0) return parts.join(' ')
 
-  if (active.length === 0) {
-    return 'Все сигналы перекрыли друг друга — добавьте наблюдения в разных зонах.'
-  }
-
-  // Top 1-2 contributors phrased as "X в Зоне"
-  const topPhrases = active.slice(0, 2).map(c => {
-    const e = evtMap[c.id]
-    if (!e) return null
-    const meta = EVENT_META[e.event]
-    return meta ? `${meta.label.toLowerCase()} в ${e.location.toLowerCase()}` : null
-  }).filter(Boolean)
-
-  // Unique signal types that have low reliability (farmer reads them as untrustworthy)
-  const weakTypes = new Set(
-    active
-      .filter(c => {
-        const e = evtMap[c.id]
-        return e && (params.reliability[e.event] ?? 1) < WEAK_RELIABILITY_THRESHOLD
-      })
-      .map(c => evtMap[c.id]?.event)
-      .filter(Boolean)
-  )
-  const weakLabels = [...weakTypes]
+  // Top 1–2 zones with meaningful rabbit activity
+  const activeZones = Object.entries(byZone)
+    .filter(([, v]) => v > 0.3)
+    .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
-    .map(t => EVENT_META[t]?.label?.toLowerCase())
-    .filter(Boolean)
 
-  let text = topPhrases.length > 0
-    ? `Больше всего указывают ${topPhrases.join(' и ')}.`
-    : `Оценка основана на ${active.length} сигналах.`
-
-  if (weakLabels.length > 0) {
-    const names = weakLabels.join(' и ')
-    const cap = names.charAt(0).toUpperCase() + names.slice(1)
-    text += ` ${cap} почти не учитываем — ненадёжный признак.`
+  if (activeZones.length === 1) {
+    const loc = ZONE_LOCATIVE[activeZones[0][0]] ?? `в ${activeZones[0][0].toLowerCase()}`
+    parts.push(`Больше всего наследили ${loc}.`)
+  } else if (activeZones.length >= 2) {
+    const loc1 = ZONE_LOCATIVE[activeZones[0][0]] ?? activeZones[0][0]
+    const loc2 = ZONE_LOCATIVE[activeZones[1][0]] ?? activeZones[1][0]
+    parts.push(`Больше всего наследили ${loc1} и ${loc2}.`)
   }
 
-  return text
+  // Signal types where reliability is low AND events of that type exist
+  const presentTypes = new Set(events.map(e => e.event))
+  const lowRel = Object.entries(params.reliability)
+    .filter(([type, rel]) => rel < 0.4 && presentTypes.has(type))
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 2)
+
+  if (lowRel.length === 1) {
+    const name = SIGNAL_DATIVE[lowRel[0][0]]
+      ?? EVENT_META[lowRel[0][0]]?.label?.toLowerCase()
+      ?? lowRel[0][0]
+    parts.push(`${cap(name)} почти не верим — слабый признак.`)
+  } else if (lowRel.length >= 2) {
+    const n0 = SIGNAL_DATIVE[lowRel[0][0]] ?? lowRel[0][0]
+    const n1 = SIGNAL_DATIVE[lowRel[1][0]] ?? lowRel[1][0]
+    parts.push(`${cap(n0)} и ${n1} почти не верим.`)
+  }
+
+  return parts.join(' ')
 }

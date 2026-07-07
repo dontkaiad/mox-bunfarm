@@ -24,15 +24,6 @@ export default function Header({ rabbits, confidence, explanation }) {
             <span className={`stat-value ${cls}`}>{confidence}%</span>
           </div>
 
-          <div className="confidence-bar-wrap">
-            <div className="confidence-bar-label">уверенность в оценке</div>
-            <div className="confidence-bar-track">
-              <div
-                className={`confidence-bar-fill ${cls}`}
-                style={{ width: `${confidence}%` }}
-              />
-            </div>
-          </div>
         </div>
       </div>
 
