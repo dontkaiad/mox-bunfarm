@@ -181,6 +181,10 @@ export default function App() {
               contributions={contributions}
               byZone={byZone}
               onImport={importEvents}
+              params={params}
+              eventMeta={allEventMeta}
+              llmRecs={llmRecs}
+              explanation={explanation}
             />
           </div>
           <ModelParams

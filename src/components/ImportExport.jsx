@@ -2,27 +2,18 @@ import { useState, useRef } from 'react'
 import Dropdown from './Dropdown.jsx'
 import Tip from './Tip.jsx'
 
-function buildReport(events, rabbits, confidence, contributions, byZone) {
-  const evtMap = Object.fromEntries(events.map(e => [e.id, e]))
-  const r = Math.round(rabbits * 10) / 10
-  const confLabel = confidence >= 70 ? 'уверенно' : confidence >= 40 ? 'предположительно' : 'неточно'
-  const verdict = r === 0 ? 'Следов нет' : `${confLabel} около ${r} кр.`
+function buildEventsJson(events) {
+  return JSON.stringify(events, null, 2)
+}
 
-  return {
-    generated: new Date().toISOString(),
-    summary: { rabbits: r, confidence, verdict },
-    by_zone: Object.fromEntries(
-      Object.entries(byZone).map(([k, v]) => [k, Math.round(v * 100) / 100])
-    ),
-    signal_contributions: [...contributions]
-      .filter(c => c.percent > 0)
-      .sort((a, b) => b.percent - a.percent)
-      .map(c => {
-        const e = evtMap[c.id]
-        return { signal: e?.event ?? '?', location: e?.location ?? '?', percent: c.percent }
-      }),
-    events,
-  }
+function downloadBlob(content, filename) {
+  const blob = new Blob([content], { type: 'application/json' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function validateImport(data) {
@@ -46,28 +37,23 @@ function validateImport(data) {
   }
 }
 
-function downloadJson(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 const FORMAT_OPTIONS = [
   { value: 'events', label: 'События' },
   { value: 'report', label: 'Полный отчёт' },
 ]
 
-export default function ImportExport({ events, rabbits, confidence, contributions, byZone, onImport }) {
-  const [showSend,       setShowSend]       = useState(false)
-  const [importError,    setImportError]    = useState(null)
-  const [sendUrl,        setSendUrl]        = useState('')
-  const [sendFormat,     setSendFormat]     = useState('events')
-  const [sendStatus,     setSendStatus]     = useState(null)
-  const [sendLoading,    setSendLoading]    = useState(false)
+export default function ImportExport({
+  events, rabbits, confidence, contributions, byZone,
+  params, eventMeta, llmRecs, explanation,
+  onImport,
+}) {
+  const [showSend,    setShowSend]    = useState(false)
+  const [importError, setImportError] = useState(null)
+  const [sendUrl,     setSendUrl]     = useState('')
+  const [sendFormat,  setSendFormat]  = useState('events')
+  const [sendStatus,  setSendStatus]  = useState(null)
+  const [sendLoading, setSendLoading] = useState(false)
+  const [pdfLoading,  setPdfLoading]  = useState(false)
   const fileRef = useRef()
 
   function handleFile(e) {
@@ -89,6 +75,18 @@ export default function ImportExport({ events, rabbits, confidence, contribution
     reader.readAsText(file)
   }
 
+  async function handleDownloadPdf() {
+    setPdfLoading(true)
+    try {
+      const { downloadPdfReport } = await import('../pdfReport.js')
+      await downloadPdfReport({ events, rabbits, confidence, contributions, byZone, params, eventMeta, llmRecs, explanation })
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   async function handleSend() {
     const url = sendUrl.trim()
     if (!url) return
@@ -100,9 +98,7 @@ export default function ImportExport({ events, rabbits, confidence, contribution
     setSendLoading(true)
     setSendStatus(null)
 
-    const payload = sendFormat === 'events'
-      ? events
-      : buildReport(events, rabbits, confidence, contributions, byZone)
+    const payload = sendFormat === 'events' ? events : { events, rabbits, confidence, byZone }
 
     try {
       const res = await fetch('/api/webhook', {
@@ -133,14 +129,15 @@ export default function ImportExport({ events, rabbits, confidence, contribution
         <button className="btn-primary ie-btn" onClick={() => fileRef.current.click()}>
           📥 Загрузить .json
         </button>
-        <button className="btn-primary ie-btn" onClick={() => downloadJson(events, 'bunfarm-events.json')}>
+        <button className="btn-primary ie-btn" onClick={() => downloadBlob(buildEventsJson(events), 'bunfarm-events.json')}>
           📤 Скачать события
         </button>
-        <button className="btn-primary ie-btn" onClick={() => downloadJson(
-          buildReport(events, rabbits, confidence, contributions, byZone),
-          'bunfarm-report.json'
-        )}>
-          📄 Скачать отчёт
+        <button
+          className="btn-primary ie-btn"
+          onClick={handleDownloadPdf}
+          disabled={pdfLoading}
+        >
+          {pdfLoading ? '…' : '📄 Скачать отчёт'}
         </button>
       </div>
 

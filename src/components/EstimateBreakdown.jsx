@@ -1,5 +1,9 @@
 import { useState, useMemo } from 'react'
 import { getConfidenceFactors } from '../confidence.js'
+import {
+  signalRole, reliabilityNote, buildSignalNote,
+  diversityConsequence, intensityConsequence, consistencyConsequence,
+} from '../reportText.js'
 import Tip from './Tip.jsx'
 
 // ── Transparent model explanation ────────────────────────────────────────────
@@ -77,52 +81,6 @@ function ModelExplanation() {
       )}
     </div>
   )
-}
-
-// ── Signal role labels ────────────────────────────────────────────────────────
-function signalRole(pct) {
-  if (pct >= 35) return { text: 'главный сигнал',  cls: 'role-main' }
-  if (pct >= 15) return { text: 'заметный вклад',  cls: 'role-notable' }
-  if (pct >= 5)  return { text: 'влияет слабо',    cls: 'role-minor' }
-  if (pct >  0)  return { text: 'почти не влияет', cls: 'role-tiny' }
-  return               { text: 'дубль',            cls: 'role-dup' }
-}
-
-function reliabilityNote(rel) {
-  if (rel >= 0.7) return 'доверие высокое'
-  if (rel >= 0.5) return 'доверие среднее'
-  return 'ненадёжный признак'
-}
-
-function buildSignalNote(pct, rel, isCollapsed) {
-  if (isCollapsed) return 'уже учтён более сильный сигнал поблизости'
-  const relNote = reliabilityNote(rel)
-  if (pct >= 35) return `на нём держится бо́льшая часть оценки — ${relNote}`
-  if (pct >= 15) return `заметный вклад в итоговую цифру — ${relNote}`
-  if (pct >= 5)  return `влияет слабо — ${relNote}`
-  return `${relNote}, почти не меняет итог`
-}
-
-// ── Confidence factor consequence texts ──────────────────────────────────────
-function diversityConsequence(value, uniqueTypes) {
-  const pct = Math.round(value * 100)
-  if (pct >= 65) return `${uniqueTypes} типа(ов) сигналов — хорошее разнообразие, оценке можно доверять`
-  if (pct >= 35) return `${uniqueTypes} типа(ов) — неплохо, но больше видов следов повысит точность`
-  return `всего ${uniqueTypes} тип(а) сигналов — мало разнообразия, добавьте больше видов наблюдений`
-}
-
-function intensityConsequence(value) {
-  const pct = Math.round(value * 100)
-  if (pct >= 65) return 'следы чёткие и выраженные — надёжная картина'
-  if (pct >= 35) return 'следы умеренной силы'
-  return 'следы слабые — возможно, всё почудилось'
-}
-
-function consistencyConsequence(value) {
-  const pct = Math.round(value * 100)
-  if (pct >= 65) return 'следы в разных зонах в одно время — видно, что кроликов несколько, система увереннее'
-  if (pct >= 35) return 'нет близких пар в разных зонах — нейтральная картина'
-  return 'следы в разных зонах близко по времени — возможно, один кролик перебегает, уверенность ниже'
 }
 
 // ── Factor bar ────────────────────────────────────────────────────────────────
