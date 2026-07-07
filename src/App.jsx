@@ -101,8 +101,14 @@ export default function App() {
 
   // ── Event import ─────────────────────────────────────────────────────────
   function importEvents(newEvents) {
-    setEvents(newEvents)
-    setActiveZone(null)
+    const suffix = `_${Date.now()}`
+    setEvents(prev => {
+      const existingIds = new Set(prev.map(e => e.id))
+      const deduped = newEvents.map(e =>
+        existingIds.has(e.id) ? { ...e, id: e.id + suffix } : e
+      )
+      return [...prev, ...deduped]
+    })
   }
 
   // ── Custom type registration ──────────────────────────────────────────────
