@@ -3,7 +3,7 @@ import { EVENT_META } from '../data.js'
 import { getConfidenceFactors } from '../confidence.js'
 import Tip from './Tip.jsx'
 
-// ── Static model explanation (3-step intro) ───────────────────────────────────
+// ── Transparent model explanation ────────────────────────────────────────────
 function ModelExplanation() {
   const [open, setOpen] = useState(false)
   return (
@@ -13,19 +13,68 @@ function ModelExplanation() {
         <span>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
-        <ol className="model-steps">
-          <li>
-            <strong>Каждый след превращаем в кроликов:</strong> чем надёжнее сигнал и чем он
-            заметнее, тем больше кроликов за ним считаем.
-          </li>
-          <li>
-            <strong>Похожие следы рядом по времени и месту схлопываем</strong> — это один и тот
-            же кролик наследил, а не новые.
-          </li>
-          <li>
-            <strong>Складываем оставшееся</strong> — получаем примерную оценку.
-          </li>
-        </ol>
+        <div className="me-body">
+
+          {/* ── 5 factors ── */}
+          <div className="me-block">
+            <div className="me-block-title">На оценку влияют 5 вещей:</div>
+
+            <div className="me-group">
+              <div className="me-group-header">📋 Из твоих наблюдений (таблица Сигналы):</div>
+              <ol className="me-factors" start={1}>
+                <li>
+                  <strong>Сколько</strong> — сколько раз заметил этот след (5 морковок, 2 ямки…)
+                </li>
+                <li>
+                  <strong>Заметность (1–10)</strong> — насколько чёткий след в этот раз. Чёткий учитываем сильнее смутного.
+                </li>
+              </ol>
+            </div>
+
+            <div className="me-group">
+              <div className="me-group-header">⚙️ Из настроек модели (для каждого типа сигнала):</div>
+              <ol className="me-factors" start={3}>
+                <li>
+                  <strong>Доверие к сигналу</strong> — насколько верим этому типу вообще (датчику больше, морковке меньше).
+                </li>
+                <li>
+                  <strong>Кроликов за сигнал</strong> — сколько кроликов считаем за одной единицей следа.
+                </li>
+              </ol>
+            </div>
+
+            <div className="me-group">
+              <div className="me-group-header">🌐 Общая настройка:</div>
+              <ol className="me-factors" start={5}>
+                <li>
+                  <strong>Скорость перемещения</strong> — как далеко кролик мог уйти между зонами. Влияет на то, считаем ли следы в разных местах разными кроликами или одним перешедшим.
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          {/* ── 3 steps ── */}
+          <div className="me-block">
+            <div className="me-block-title">Как считается (3 шага):</div>
+            <ol className="me-steps">
+              <li>
+                <strong>Каждый след → кролики:</strong> Сколько × курс × доверие × заметность.
+              </li>
+              <li>
+                <strong>Схлопываем дубли:</strong> одинаковые следы рядом по времени и месту — один кролик наследил. Следы в разных зонах близко по времени тоже можем счесть одним, если кролик успел перейти (зависит от скорости перемещения).
+              </li>
+              <li>
+                <strong>Складываем оставшееся</strong> — примерная оценка.
+              </li>
+            </ol>
+          </div>
+
+          {/* ── Confidence note ── */}
+          <div className="me-conf-note">
+            <strong>Уверенность — это не оценка.</strong> Она не влияет на число кроликов, а показывает, насколько цифре можно верить: разнообразие сигналов, сила следов, согласованность по зонам.
+          </div>
+
+        </div>
       )}
     </div>
   )

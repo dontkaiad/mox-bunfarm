@@ -706,34 +706,78 @@
 }
 .model-explainer-toggle:hover { background: rgba(92,51,25,0.13); }
 
-.model-steps {
-  list-style: none;
-  counter-reset: steps;
-  padding: 8px 14px 10px 14px;
+/* ── Model explanation expanded content ── */
+.me-body {
+  padding: 8px 14px 12px;
+  background: rgba(245,230,200,0.35);
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  background: rgba(245,230,200,0.35);
+  gap: 10px;
 }
 
-.model-steps li {
-  counter-increment: steps;
+.me-block {
   display: flex;
-  gap: 8px;
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--text);
+  flex-direction: column;
+  gap: 5px;
 }
 
-.model-steps li::before {
-  content: counter(steps) ".";
+.me-block-title {
+  font-size: 0.78rem;
+  font-weight: bold;
+  color: var(--panel-header);
+  letter-spacing: 0.2px;
+}
+
+.me-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 6px;
+}
+
+.me-group-header {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.me-factors,
+.me-steps {
+  list-style: decimal;
+  padding: 0 0 0 20px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.me-factors li,
+.me-steps li {
+  font-size: 0.83rem;
+  line-height: 1.4;
+  color: var(--text);
+  padding-left: 3px;
+}
+
+.me-factors li::marker,
+.me-steps li::marker {
   color: var(--panel-header);
   font-weight: bold;
-  flex-shrink: 0;
-  min-width: 14px;
 }
 
-.model-steps strong { color: var(--panel-header); font-weight: bold; }
+.me-factors strong,
+.me-steps strong { color: var(--panel-header); }
+
+.me-conf-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: rgba(139,94,60,0.08);
+  border-left: 3px solid rgba(139,94,60,0.4);
+  padding: 5px 8px;
+  border-radius: 0 3px 3px 0;
+  line-height: 1.4;
+}
+.me-conf-note strong { color: var(--panel-header); }
 
 /* ── Two-column sections row ── */
 .breakdown-sections {
