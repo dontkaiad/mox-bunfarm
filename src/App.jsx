@@ -60,8 +60,8 @@ export default function App() {
   const byZone        = useMemo(() => calculateByZone(events, params),                              [events, params])
 
   const explanation = useMemo(
-    () => buildSubtitle(rabbits, byZone, events, params),
-    [rabbits, byZone, events, params]
+    () => buildSubtitle(rabbits, byZone, events, params, allEventMeta),
+    [rabbits, byZone, events, params, allEventMeta]
   )
 
   // ── /api/advise — fires only when observations change, not per slider tick ──
