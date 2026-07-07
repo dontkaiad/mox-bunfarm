@@ -41,7 +41,7 @@ TIMEOUT_SECONDS = 10
 
 
 class Event(BaseModel):
-    id: int
+    id: str
     event: str
     location: str
     time: str
@@ -50,7 +50,7 @@ class Event(BaseModel):
 
 
 class Contribution(BaseModel):
-    id: int
+    id: str
     percent: float
 
 
