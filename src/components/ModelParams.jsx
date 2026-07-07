@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import Tip from './Tip.jsx'
 
 // Reliability: stored 0–1, slider 1–10 (0.3→3, 0.6→6, 0.9→9)
@@ -54,72 +53,61 @@ function ParamSlider({ value, onChange, toSlider, fromSlider }) {
 }
 
 export default function ModelParams({ params, onUpdate, hint, eventMeta, eventTypes }) {
-  const [open, setOpen] = useState(true)
-
   return (
-    <div className="model-params-wrap panel">
-      <button className="model-params-toggle" onClick={() => setOpen(o => !o)}>
-        <span>⚙️ Настройка модели</span>
-        <span>{open ? '▲' : '▼'}</span>
-      </button>
-
-      {open && (
-        <div className="model-params-body">
-          {/* Movement window — categorical, stays as 3-preset */}
-          <div className="param-block">
-            <div className="param-type-label">
-              🏃 Скорость перемещения{' '}
-              <Tip text="Если два следа в разных местах появились близко по времени — возможно, один кролик. Чем быстрее — тем строже объединяем." />
-            </div>
-            <PresetGroup
-              presets={MOVEMENT_PRESETS}
-              current={params.movementWindowMinutes}
-              onSelect={v => onUpdate('movementWindowMinutes', null, v)}
-            />
-            {hint?.target === 'movementWindowMinutes' && (
-              <div className="param-hint">💡 {hint.text}</div>
-            )}
-          </div>
-
-          {/* Per-signal-type sliders */}
-          {eventTypes.map(type => {
-            const meta = eventMeta[type]
-            const showHint = hint && (
-              hint.target === `reliability.${type}` ||
-              hint.target === `rabbitsPerUnit.${type}`
-            )
-            return (
-              <div key={type} className="param-block">
-                <div className="param-type-label">{meta.emoji} {meta.label}</div>
-
-                <div className="param-row-label">
-                  Доверие к сигналу{' '}
-                  <Tip text="Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу." />
-                </div>
-                <ParamSlider
-                  value={params.reliability[type]}
-                  onChange={v => onUpdate('reliability', type, v)}
-                  toSlider={relToSlider}
-                  fromSlider={sliderToRel}
-                />
-
-                <div className="param-row-label">
-                  Кроликов за сигнал{' '}
-                  <Tip text="Это множитель, а не число кроликов. Итог получается меньше: заметность и доверие уменьшают вклад, а похожие следы рядом схлопываются в одного кролика." />
-                </div>
-                <ParamSlider
-                  value={params.rabbitsPerUnit[type]}
-                  onChange={v => onUpdate('rabbitsPerUnit', type, v)}
-                  toSlider={rpuToSlider}
-                  fromSlider={sliderToRpu}
-                />
-
-                {showHint && <div className="param-hint">💡 {hint.text}</div>}
-              </div>
-            )
-          })}
+    <div className="model-params-body">
+      {/* Movement window — categorical, stays as 3-preset */}
+      <div className="param-block">
+        <div className="param-type-label">
+          🏃 Скорость перемещения{' '}
+          <Tip text="Если два следа в разных местах появились близко по времени — возможно, один кролик. Чем быстрее — тем строже объединяем." />
         </div>
-      )}
+        <PresetGroup
+          presets={MOVEMENT_PRESETS}
+          current={params.movementWindowMinutes}
+          onSelect={v => onUpdate('movementWindowMinutes', null, v)}
+        />
+        {hint?.target === 'movementWindowMinutes' && (
+          <div className="param-hint">💡 {hint.text}</div>
+        )}
+      </div>
+
+      {/* Per-signal-type sliders */}
+      {eventTypes.map(type => {
+        const meta = eventMeta[type]
+        const showHint = hint && (
+          hint.target === `reliability.${type}` ||
+          hint.target === `rabbitsPerUnit.${type}`
+        )
+        return (
+          <div key={type} className="param-block">
+            <div className="param-type-label">{meta.emoji} {meta.label}</div>
+
+            <div className="param-row-label">
+              Доверие к сигналу{' '}
+              <Tip text="Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу." />
+            </div>
+            <ParamSlider
+              value={params.reliability[type]}
+              onChange={v => onUpdate('reliability', type, v)}
+              toSlider={relToSlider}
+              fromSlider={sliderToRel}
+            />
+
+            <div className="param-row-label">
+              Кроликов за сигнал{' '}
+              <Tip text="Это множитель, а не число кроликов. Итог получается меньше: заметность и доверие уменьшают вклад, а похожие следы рядом схлопываются в одного кролика." />
+            </div>
+            <ParamSlider
+              value={params.rabbitsPerUnit[type]}
+              onChange={v => onUpdate('rabbitsPerUnit', type, v)}
+              toSlider={rpuToSlider}
+              fromSlider={sliderToRpu}
+            />
+
+            {showHint && <div className="param-hint">💡 {hint.text}</div>}
+          </div>
+        )
+      })}
     </div>
   )
 }

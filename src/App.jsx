@@ -23,6 +23,7 @@ const TABS = [
   { id: 'map',       label: '🗺️ Карта' },
   { id: 'recs',      label: '📋 Рекомендации' },
   { id: 'breakdown', label: '🔍 Разбор оценки' },
+  { id: 'settings',  label: '⚙️ Настройка модели' },
   { id: 'worklog',   label: '🤖 AI Журнал' },
 ]
 
@@ -193,13 +194,6 @@ export default function App() {
               explanation={explanation}
             />
           </div>
-          <ModelParams
-            params={params}
-            onUpdate={updateParam}
-            hint={paramHint}
-            eventMeta={allEventMeta}
-            eventTypes={allEventTypes}
-          />
         </div>
 
         <div className="right-area">
@@ -255,6 +249,16 @@ export default function App() {
                 events={events}
                 params={params}
                 eventMeta={allEventMeta}
+              />
+            )}
+
+            {activeTab === 'settings' && (
+              <ModelParams
+                params={params}
+                onUpdate={updateParam}
+                hint={paramHint}
+                eventMeta={allEventMeta}
+                eventTypes={allEventTypes}
               />
             )}
 

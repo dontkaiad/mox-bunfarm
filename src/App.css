@@ -483,23 +483,6 @@
 }
 
 /* ── Model params ── */
-.model-params-toggle {
-  width: 100%;
-  background: var(--panel-header);
-  color: var(--panel-header-text);
-  border: none;
-  border-radius: 3px;
-  padding: 8px 14px;
-  text-align: left;
-  font-size: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.model-params-toggle:hover { background: #6b3e1e; }
-
 .model-params-body {
   padding: 10px 9px 12px;
   display: flex;
