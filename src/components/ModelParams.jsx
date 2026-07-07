@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { EVENT_META, EVENT_TYPES } from '../data.js'
+import Tip from './Tip.jsx'
 
 const RELIABILITY_PRESETS = [
   { label: 'слабо',  value: 0.3 },
@@ -19,7 +20,6 @@ const MOVEMENT_PRESETS = [
   { label: 'быстро',   value: 15 },
 ]
 
-// Returns the preset whose value is closest to `current`
 function closestPreset(current, presets) {
   return presets.reduce((best, p) =>
     Math.abs(p.value - current) < Math.abs(best.value - current) ? p : best
@@ -49,7 +49,7 @@ export default function ModelParams({ params, onUpdate, hint }) {
   return (
     <div className="model-params-wrap panel">
       <button className="model-params-toggle" onClick={() => setOpen(o => !o)}>
-        <span>⚙️ Настройка распознавания</span>
+        <span>⚙️ Настройка модели</span>
         <span>{open ? '▲' : '▼'}</span>
       </button>
 
@@ -57,7 +57,10 @@ export default function ModelParams({ params, onUpdate, hint }) {
         <div className="model-params-body">
           {/* Movement window — global param */}
           <div className="param-block">
-            <div className="param-type-label">🏃 Скорость перемещения</div>
+            <div className="param-type-label">
+              🏃 Скорость перемещения{' '}
+              <Tip text="Если два следа в разных местах появились близко по времени — возможно, один кролик. Чем быстрее — тем строже объединяем." />
+            </div>
             <PresetGroup
               presets={MOVEMENT_PRESETS}
               current={params.movementWindowMinutes}
@@ -79,14 +82,20 @@ export default function ModelParams({ params, onUpdate, hint }) {
               <div key={type} className="param-block">
                 <div className="param-type-label">{meta.emoji} {meta.label}</div>
 
-                <div className="param-row-label">Доверие к сигналу:</div>
+                <div className="param-row-label">
+                  Доверие к сигналу{' '}
+                  <Tip text="Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу." />
+                </div>
                 <PresetGroup
                   presets={RELIABILITY_PRESETS}
                   current={params.reliability[type]}
                   onSelect={v => onUpdate('reliability', type, v)}
                 />
 
-                <div className="param-row-label">Кроликов за один сигнал:</div>
+                <div className="param-row-label">
+                  Кроликов за сигнал{' '}
+                  <Tip text="Сколько кроликов стоит за одним таким следом. «Много» — кролики ходят группами." />
+                </div>
                 <PresetGroup
                   presets={RPU_PRESETS}
                   current={params.rabbitsPerUnit[type]}

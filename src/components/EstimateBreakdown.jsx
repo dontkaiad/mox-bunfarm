@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { EVENT_META } from '../data.js'
 import { getConfidenceFactors } from '../confidence.js'
+import Tip from './Tip.jsx'
 
 // ── Static model explanation (3-step intro) ───────────────────────────────────
 function ModelExplanation() {
@@ -129,7 +130,10 @@ export default function EstimateBreakdown({ rabbits, confidence, contributions, 
 
         {/* ── Signal ranking ── */}
         <div className="breakdown-section">
-          <div className="breakdown-section-title">Вклад каждого сигнала</div>
+          <div className="breakdown-section-title">
+            Вклад каждого сигнала{' '}
+            <Tip text="Какой процент итоговой оценки приходится на каждый сигнал после схлопывания повторов." />
+          </div>
           {ranked.length === 0 ? (
             <p className="breakdown-empty">Нет данных</p>
           ) : (
