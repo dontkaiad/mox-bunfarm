@@ -42,11 +42,14 @@ function EventForm({ initial, onSave, onCancel, onDelete, isNew }) {
             Заметность (1–10){' '}
             <Tip text="Насколько чёткий след ты видишь. Явную улику система учитывает сильнее смутного намёка." />
           </span>
-          <input
-            type="number" min={1} max={10}
-            value={draft.intensity}
-            onChange={e => set('intensity', Math.min(10, Math.max(1, +e.target.value || 1)))}
-          />
+          <div className="param-slider-row">
+            <input
+              type="range" min={1} max={10} step={1}
+              value={draft.intensity}
+              onChange={e => set('intensity', +e.target.value)}
+            />
+            <span className="param-slider-val">{draft.intensity}</span>
+          </div>
         </label>
       </div>
       <div className="evt-form-actions">

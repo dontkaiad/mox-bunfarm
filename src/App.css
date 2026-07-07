@@ -112,7 +112,7 @@
 /* ── Main layout: left panel + right area ── */
 .main-layout {
   display: grid;
-  grid-template-columns: 460px 1fr;
+  grid-template-columns: 560px 1fr;
   gap: 10px;
   align-items: start;
 }
@@ -140,13 +140,12 @@
   border-collapse: collapse;
   font-size: 0.8rem;
 }
-/* col widths — sized so every header fits on one line at 20px base font */
-.events-table col.c-signal   { width: 17%; }
-.events-table col.c-location { width: 18%; }
-.events-table col.c-time     { width: 14%; }
-.events-table col.c-count    { width: 14%; }
-.events-table col.c-intensity{ width: 23%; }
-.events-table col.c-pct      { width: 14%; }
+.events-table col.c-signal   { width: 33%; }
+.events-table col.c-location { width: 15%; }
+.events-table col.c-time     { width: 11%; }
+.events-table col.c-count    { width: 12%; }
+.events-table col.c-intensity{ width: 18%; }
+.events-table col.c-pct      { width: 11%; }
 
 .events-table th {
   background: rgba(92,51,25,0.12);
@@ -156,7 +155,7 @@
   padding: 4px 4px 3px;
   text-align: left;
   border-bottom: 2px solid var(--panel-border);
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
   line-height: 1.2;
 }

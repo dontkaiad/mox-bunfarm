@@ -106,7 +106,7 @@ export default function ModelParams({ params, onUpdate, hint }) {
 
                 <div className="param-row-label">
                   Кроликов за сигнал{' '}
-                  <Tip text="Сколько кроликов стоит за одним таким следом. «Много» — кролики ходят группами." />
+                  <Tip text="Это множитель, а не число кроликов. Итог получается меньше: заметность и доверие уменьшают вклад, а похожие следы рядом схлопываются в одного кролика." />
                 </div>
                 <ParamSlider
                   value={params.rabbitsPerUnit[type]}
