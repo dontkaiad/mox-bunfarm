@@ -127,12 +127,12 @@ export function calculateRabbits(events, params) {
 }
 
 // Confidence score 0..100 from three weighted factors
-export function calculateConfidence(events, params) {
+export function calculateConfidence(events, params, knownTypeCount = 5) {
   if (!events.length) return 0
 
   // Factor 1: signal type diversity
   const uniqueTypes = new Set(events.map(e => e.event)).size
-  const diversity = Math.min(uniqueTypes / 5, 1)
+  const diversity = Math.min(uniqueTypes / knownTypeCount, 1)
 
   // Factor 2: average signal intensity
   const avgIntensity =

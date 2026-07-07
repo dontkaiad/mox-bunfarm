@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { EVENT_META } from '../data.js'
 import { getConfidenceFactors } from '../confidence.js'
 import Tip from './Tip.jsx'
 
@@ -20,7 +19,7 @@ function ModelExplanation() {
             <div className="me-block-title">На оценку влияют 5 вещей:</div>
 
             <div className="me-group">
-              <div className="me-group-header">📋 Из твоих наблюдений (таблица Сигналы):</div>
+              <div className="me-group-header">📋 Из твоих наблюдений (Журнал сигналов):</div>
               <ol className="me-factors" start={1}>
                 <li>
                   <strong>Сколько</strong> — сколько раз заметил этот след (5 морковок, 2 ямки…)
@@ -146,20 +145,19 @@ function FactorBar({ label, value, consequence }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function EstimateBreakdown({ rabbits, confidence, contributions, events, params }) {
+export default function EstimateBreakdown({ rabbits, confidence, contributions, events, params, eventMeta }) {
   const factors     = useMemo(() => getConfidenceFactors(events, params), [events, params])
   const evtMap      = useMemo(() => Object.fromEntries(events.map(e => [e.id, e])), [events])
   const uniqueTypes = useMemo(() => new Set(events.map(e => e.event)).size, [events])
   const totalValue  = useMemo(() => contributions.reduce((s, c) => s + c.value, 0), [contributions])
 
-  // All role/note fields are pure functions of contributions+params — recompute on every change
   const ranked = useMemo(() => {
     return [...contributions]
       .sort((a, b) => b.value - a.value)
       .map(c => {
         const evt = evtMap[c.id]
         if (!evt) return null
-        const meta        = EVENT_META[evt.event]
+        const meta        = eventMeta?.[evt.event]
         const isCollapsed = c.percent === 0
         const pct         = isCollapsed ? 0 : Math.round((c.value / (totalValue || 1)) * 100)
         const role        = signalRole(pct)
