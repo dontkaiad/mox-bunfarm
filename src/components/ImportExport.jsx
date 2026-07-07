@@ -1,6 +1,4 @@
 import { useState, useRef } from 'react'
-import Dropdown from './Dropdown.jsx'
-import Tip from './Tip.jsx'
 
 function buildEventsJson(events) {
   return JSON.stringify(events, null, 2)
@@ -37,22 +35,12 @@ function validateImport(data) {
   }
 }
 
-const FORMAT_OPTIONS = [
-  { value: 'events', label: 'События' },
-  { value: 'report', label: 'Полный отчёт' },
-]
-
 export default function ImportExport({
   events, rabbits, confidence, contributions, byZone,
   params, eventMeta, llmRecs, explanation,
   onImport,
 }) {
-  const [showSend,    setShowSend]    = useState(false)
   const [importError, setImportError] = useState(null)
-  const [sendUrl,     setSendUrl]     = useState('')
-  const [sendFormat,  setSendFormat]  = useState('events')
-  const [sendStatus,  setSendStatus]  = useState(null)
-  const [sendLoading, setSendLoading] = useState(false)
   const [pdfLoading,  setPdfLoading]  = useState(false)
   const fileRef = useRef()
 
@@ -87,38 +75,6 @@ export default function ImportExport({
     }
   }
 
-  async function handleSend() {
-    const url = sendUrl.trim()
-    if (!url) return
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      setSendStatus({ ok: false, message: 'Ссылка должна начинаться с http:// или https://' })
-      return
-    }
-
-    setSendLoading(true)
-    setSendStatus(null)
-
-    const payload = sendFormat === 'events' ? events : { events, rabbits, confidence, byZone }
-
-    try {
-      const res = await fetch('/api/webhook', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ url, report: payload }),
-        signal:  AbortSignal.timeout(15000),
-      })
-      const data = await res.json()
-      setSendStatus(data.ok
-        ? { ok: true,  message: `Отправлено ✓  (HTTP ${data.status})` }
-        : { ok: false, message: data.error ?? `HTTP ${data.status}` }
-      )
-    } catch {
-      setSendStatus({ ok: false, message: 'Ошибка соединения с сервером' })
-    } finally {
-      setSendLoading(false)
-    }
-  }
-
   return (
     <div className="ie-root">
       <input type="file" accept=".json" ref={fileRef} style={{ display: 'none' }} onChange={handleFile} />
@@ -142,48 +98,6 @@ export default function ImportExport({
       </div>
 
       {importError && <div className="ie-error">⚠️ {importError}</div>}
-
-      <div className="ie-send-header">
-        <button className="ie-send-toggle" onClick={() => setShowSend(o => !o)}>
-          <span>🌐 Отправить отчёт по ссылке</span>
-          <span className="ie-send-arrow">{showSend ? '▲' : '▼'}</span>
-        </button>
-        <Tip text="Отчёт уйдёт POST-запросом на указанный адрес — удобно, чтобы передать данные в другую систему." />
-      </div>
-
-      {showSend && (
-        <div className="ie-send-body">
-          <label className="ie-field-label">Ссылка для отправки отчёта</label>
-          <input
-            type="text"
-            className="webhook-url-input"
-            placeholder="https://example.com/hook"
-            value={sendUrl}
-            onChange={e => setSendUrl(e.target.value)}
-          />
-          <div className="webhook-format-row">
-            <span>Формат:</span>
-            <Dropdown
-              options={FORMAT_OPTIONS}
-              value={sendFormat}
-              onChange={setSendFormat}
-              className="webhook-format-dropdown"
-            />
-            <button
-              className="btn-primary ie-btn"
-              onClick={handleSend}
-              disabled={!sendUrl.trim() || sendLoading}
-            >
-              {sendLoading ? '…' : 'Отправить'}
-            </button>
-          </div>
-          {sendStatus && (
-            <div className={`webhook-status ${sendStatus.ok ? 'ok' : 'err'}`}>
-              {sendStatus.message}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
