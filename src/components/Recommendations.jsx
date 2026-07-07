@@ -8,32 +8,42 @@ function buildFallbackRecs(rabbits, confidence, events, byZone) {
 
   const recs = []
 
+  // Most active zone — go check there first
   const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0]
   if (topZone && topZone[1] > 0.5) {
-    recs.push(`Зона «${topZone[0]}» наиболее активна (~${topZone[1].toFixed(1)} кр.). Начните обход отсюда.`)
+    recs.push(`Зона «${topZone[0]}» — самая активная (~${topZone[1].toFixed(1)} кр.). Начните следующий обход отсюда.`)
   }
 
+  // Motion sensor fired — high-quality signal, go look while evidence is fresh
   if (events.some(e => e.event === 'motion_sensor')) {
-    recs.push('Датчик движения сработал — расставьте ловушки рядом с сараем в течение ближайших часов.')
+    recs.push('Датчик движения сработал — осмотрите сарай, пока следы свежие.')
   }
 
+  // Large estimate — silent zones need sensors to confirm scope
   if (rabbits > 5) {
-    recs.push(`Оценка крупная (~${rabbits.toFixed(1)} кр.). Одних ловушек мало — рассмотрите сетчатый забор по периметру.`)
-  } else if (rabbits > 2) {
-    recs.push('Небольшая группа. 2–3 гуманные ловушки по периметру должно хватить.')
+    recs.push(`Оценка крупная (~${Math.round(rabbits)} кр.). Установите датчики в зонах без сигналов — возможно, упускаем часть активности.`)
   }
 
+  // Low confidence — need more diverse or stronger signals
   if (confidence < 50) {
-    recs.push('Уверенность низкая. Добавьте сигналы из разных зон — разнообразие источников повышает точность.')
+    recs.push('Уверенность низкая. Добавьте сигналы из разных зон и разных типов — это повысит точность оценки.')
   }
 
+  // Footprints in multiple zones — track the movement corridor
   const fpZones = [...new Set(events.filter(e => e.event === 'footprints').map(e => e.location))]
   if (fpZones.length > 1) {
-    recs.push('Следы найдены в нескольких зонах — кролики активно перемещаются. Осмотрите переходы между участками.')
+    recs.push(`Следы в нескольких зонах (${fpZones.join(', ')}) — проверьте переходы между участками.`)
   }
 
+  // Greenhouse activity — check entry points
   if ((byZone['Теплица'] ?? 0) > 1) {
-    recs.push('⚠️ Теплица под угрозой! Проверьте и укрепите входы — потери урожая возможны.')
+    recs.push('⚠️ Теплица: повышенная активность. Осмотрите периметр — найдите, откуда заходят.')
+  }
+
+  // Mostly weak signals — need confirmation before trusting the estimate
+  const weakCount = events.filter(e => e.intensity <= 3).length
+  if (weakCount > 0 && weakCount >= events.length / 2) {
+    recs.push('Большинство следов слабые (заметность ≤3). Повторите наблюдение в тех же местах для подтверждения.')
   }
 
   return recs.slice(0, 4)
