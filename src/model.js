@@ -138,24 +138,31 @@ export function calculateConfidence(events, params, knownTypeCount = 5) {
   const avgIntensity =
     events.reduce((s, e) => s + e.intensity, 0) / events.length / 10
 
-  // Factor 3: consistency - 1 minus coefficient of variation across zones.
-  // Use collapsed events so duplicate same-type+zone signals don't inflate one zone's weight.
+  // Factor 3: time-aware cross-zone consistency.
+  // Pairs of collapsed events in DIFFERENT zones are classified by their time gap:
+  //   dt = 0              → simultaneous → definitely different rabbits → clarity ↑
+  //   0 < dt ≤ mvWindow   → close, possibly the same rabbit moving → ambiguous → clarity ↓
+  //   dt > mvWindow       → unrelated sightings → neutral (excluded from analysis)
+  //   same zone           → excluded (no cross-zone information)
+  // Scale: 0.5 = neutral (no cross-zone pairs), 1.0 = all simultaneous, 0.0 = all ambiguous.
   const collapsed = collapseEvents(events, params)
-  const zoneTotals = {}
-  for (const evt of collapsed) {
-    zoneTotals[evt.location] =
-      (zoneTotals[evt.location] ?? 0) + eventContribution(evt, params)
-  }
-  const vals = Object.values(zoneTotals)
-  let consistency = 1
-  if (vals.length > 1) {
-    const mean = vals.reduce((s, v) => s + v, 0) / vals.length
-    if (mean > 0) {
-      const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
-      const cv = Math.sqrt(variance) / mean
-      consistency = Math.max(0, 1 - Math.min(cv, 1))
+  const mvWindow  = params.movementWindowMinutes ?? 30
+  let clearPairs     = 0
+  let ambiguousPairs = 0
+  for (let i = 0; i < collapsed.length; i++) {
+    for (let j = i + 1; j < collapsed.length; j++) {
+      if (collapsed[i].location === collapsed[j].location) continue
+      const dt = Math.abs(
+        timeToMinutes(collapsed[i].time) - timeToMinutes(collapsed[j].time)
+      )
+      if (dt === 0)            clearPairs++
+      else if (dt <= mvWindow) ambiguousPairs++
     }
   }
+  const totalCross = clearPairs + ambiguousPairs
+  const consistency = totalCross === 0
+    ? 0.5                      // no cross-zone evidence → neutral baseline
+    : clearPairs / totalCross  // 1.0 all-simultaneous ↔ 0.0 all-ambiguous
 
   const { diversity: wd, intensity: wi, consistency: wc } = CONFIDENCE_WEIGHTS
   const raw = wd * diversity + wi * avgIntensity + wc * consistency

@@ -156,18 +156,67 @@ describe('calculateConfidence', () => {
     )
   })
 
-  it('collapsed duplicates do not inflate one zone — consistency equals single-event baseline', () => {
-    // Two footprints in Огород within 60 min collapse to the winner.
-    // Loser has the same intensity as winner so raw avgIntensity stays equal,
-    // letting us isolate the consistency factor.
-    // A second zone (Теплица) provides the cross-zone comparison.
+  it('collapsed duplicates do not affect cross-zone consistency', () => {
+    // winner and loser collapse (same type+zone, within window).
+    // After collapse only [winner, other] remain; both are simultaneous (dt=0)
+    // so clearPairs=1 → consistency=1.0 either way.
     const winner = evt({ id: 'hi', location: 'Огород',  count: 2, intensity: 8, time: '10:00' })
     const loser  = evt({ id: 'lo', location: 'Огород',  count: 1, intensity: 8, time: '10:30' })
     const other  = evt({ id: 'ot', location: 'Теплица', count: 1, intensity: 8, time: '10:00' })
 
-    const withDuplicate   = calculateConfidence([winner, loser, other], DEFAULT_PARAMS)
+    const withDuplicate    = calculateConfidence([winner, loser, other], DEFAULT_PARAMS)
     const withoutDuplicate = calculateConfidence([winner, other],        DEFAULT_PARAMS)
     expect(withDuplicate).toBe(withoutDuplicate)
+  })
+
+  describe('consistency factor (time-aware)', () => {
+    const P = { ...DEFAULT_PARAMS, movementWindowMinutes: 30 }
+
+    it('simultaneous cross-zone events give higher confidence than close-time cross-zone events', () => {
+      // dt=0 → clearPairs=1 → consistency=1.0
+      const simultaneous = [
+        evt({ id: 'a', location: 'Огород',  time: '10:00', intensity: 7 }),
+        evt({ id: 'b', location: 'Теплица', time: '10:00', intensity: 7 }),
+      ]
+      // dt=15 ≤ 30 → ambiguousPairs=1 → consistency=0.0
+      const closeTime = [
+        evt({ id: 'a', location: 'Огород',  time: '10:00', intensity: 7 }),
+        evt({ id: 'b', location: 'Теплица', time: '10:15', intensity: 7 }),
+      ]
+      expect(calculateConfidence(simultaneous, P)).toBeGreaterThan(
+        calculateConfidence(closeTime, P)
+      )
+    })
+
+    it('single-zone (neutral) gives higher confidence than ambiguous cross-zone', () => {
+      // No cross-zone pairs → consistency=0.5 (neutral baseline)
+      const singleZone = [
+        evt({ id: 'a', event: 'footprints',    location: 'Огород', time: '10:00', intensity: 7 }),
+        evt({ id: 'b', event: 'motion_sensor', location: 'Огород', time: '10:20', intensity: 7 }),
+      ]
+      // dt=15 ≤ 30 → consistency=0.0 (ambiguous)
+      const ambiguousCross = [
+        evt({ id: 'a', event: 'footprints',    location: 'Огород',  time: '10:00', intensity: 7 }),
+        evt({ id: 'b', event: 'motion_sensor', location: 'Теплица', time: '10:15', intensity: 7 }),
+      ]
+      expect(calculateConfidence(singleZone, P)).toBeGreaterThan(
+        calculateConfidence(ambiguousCross, P)
+      )
+    })
+
+    it('far-apart cross-zone events are not penalized — same as single-zone neutral', () => {
+      // dt=60 > 30-min window → excluded → totalCross=0 → consistency=0.5
+      const farApart = [
+        evt({ id: 'a', event: 'footprints',    location: 'Огород',  time: '10:00', intensity: 7 }),
+        evt({ id: 'b', event: 'motion_sensor', location: 'Теплица', time: '11:00', intensity: 7 }),
+      ]
+      // Same zone, same types and intensities — for an apples-to-apples comparison
+      const sameZone = [
+        evt({ id: 'a', event: 'footprints',    location: 'Огород', time: '10:00', intensity: 7 }),
+        evt({ id: 'b', event: 'motion_sensor', location: 'Огород', time: '11:00', intensity: 7 }),
+      ]
+      expect(calculateConfidence(farApart, P)).toBe(calculateConfidence(sameZone, P))
+    })
   })
 })
 
