@@ -224,15 +224,33 @@ export async function downloadPdfReport(data) {
   document.body.appendChild(container)
 
   try {
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
-    await doc.html(container.firstElementChild, {
-      x:           15,
-      y:           15,
-      width:       180,    // content width in mm
-      windowWidth: 680,    // render width in px (≈180mm at 96dpi)
-      autoPaging:  'text',
-      html2canvas: { scale: 2, useCORS: true, logging: false },
-    })
+    // Use html2canvas directly so the browser renders fonts (including Cyrillic)
+    // rather than jsPDF's built-in Latin-only fonts.
+    const el     = container.firstElementChild
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false })
+
+    const imgData  = canvas.toDataURL('image/png')
+    const doc      = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+    const pageW    = doc.internal.pageSize.getWidth()
+    const pageH    = doc.internal.pageSize.getHeight()
+    const margin   = 10
+    const usableW  = pageW - margin * 2
+    const imgH     = (canvas.height / canvas.width) * usableW
+    const pageCount = Math.ceil(imgH / (pageH - margin * 2))
+
+    for (let i = 0; i < pageCount; i++) {
+      if (i > 0) doc.addPage()
+      const srcY   = i * (pageH - margin * 2) * (canvas.width / usableW)
+      const srcH   = Math.min((pageH - margin * 2) * (canvas.width / usableW), canvas.height - srcY)
+      const sliceH = srcH * (usableW / canvas.width)
+
+      const slice  = document.createElement('canvas')
+      slice.width  = canvas.width
+      slice.height = srcH
+      slice.getContext('2d').drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH)
+      doc.addImage(slice.toDataURL('image/png'), 'PNG', margin, margin, usableW, sliceH)
+    }
+
     doc.save('bunfarm-report.pdf')
   } finally {
     document.body.removeChild(container)
