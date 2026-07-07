@@ -270,28 +270,59 @@
   overflow: hidden;
 }
 
-/* ── "?" tooltip badge ── */
-.tip {
-  display: inline-block;
-  width: 13px;
-  height: 13px;
+/* ── "?" tooltip button + popup ── */
+.tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: rgba(92,51,25,0.15);
   border: 1px solid var(--panel-border);
   color: var(--text-muted);
   font-size: 0.65rem;
-  text-align: center;
-  line-height: 12px;
+  font-family: var(--font);
   cursor: help;
-  text-decoration: none;
-  margin-left: 3px;
+  padding: 0;
+  line-height: 1;
   vertical-align: middle;
-  font-style: normal;
+  margin-left: 3px;
+  transition: background 0.1s, border-color 0.1s;
 }
-.tip:hover {
+.tip-btn:hover,
+.tip-btn.tip-open {
   background: rgba(232,160,32,0.3);
   color: var(--text);
   border-color: var(--accent);
+}
+
+/* popup uses position:fixed (set inline) to escape overflow:hidden parents */
+.tip-popup {
+  display: block;
+  width: 210px;
+  white-space: normal;
+  background: var(--panel-header);
+  border: 2px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: normal;
+  color: var(--panel-header-text);
+  line-height: 1.4;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
+  pointer-events: none;
+  font-family: var(--font);
+}
+.tip-popup::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--panel-border);
 }
 
 .inline-num {
