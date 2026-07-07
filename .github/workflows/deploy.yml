@@ -19,12 +19,13 @@ jobs:
             cd ~/heylark/mox-bunfarm
             git pull
             # Build frontend in Docker so the host needs no Node installation.
-            # -u preserves ownership so rsync can read the output as the current user.
+            # Run as root inside the container (standard for build containers) so npm
+            # can freely write /.npm cache and node_modules. Chown dist back to the
+            # host user so the subsequent rsync can read it.
             docker run --rm \
               -v "$(pwd)":/app \
               -w /app \
-              -u "$(id -u):$(id -g)" \
               node:20-alpine \
-              sh -c "npm ci && npm run build"
+              sh -c "npm ci && npm run build && chown -R $(id -u):$(id -g) dist"
             rsync -a --delete dist/ ~/heylark/heylark-infra/caddy/bunfarm/
             docker compose up -d --build --force-recreate
