@@ -174,6 +174,14 @@ export default function App() {
               allEventTypes={allEventTypes}
               onAddCustomType={addCustomType}
             />
+            <ImportExport
+              events={events}
+              rabbits={rabbits}
+              confidence={confidence}
+              contributions={contributions}
+              byZone={byZone}
+              onImport={importEvents}
+            />
           </div>
           <ModelParams
             params={params}
@@ -181,14 +189,6 @@ export default function App() {
             hint={paramHint}
             eventMeta={allEventMeta}
             eventTypes={allEventTypes}
-          />
-          <ImportExport
-            events={events}
-            rabbits={rabbits}
-            confidence={confidence}
-            contributions={contributions}
-            byZone={byZone}
-            onImport={importEvents}
           />
         </div>
 

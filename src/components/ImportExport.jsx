@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import Dropdown from './Dropdown.jsx'
+import Tip from './Tip.jsx'
 
 function buildReport(events, rabbits, confidence, contributions, byZone) {
   const evtMap = Object.fromEntries(events.map(e => [e.id, e]))
@@ -61,12 +62,12 @@ const FORMAT_OPTIONS = [
 ]
 
 export default function ImportExport({ events, rabbits, confidence, contributions, byZone, onImport }) {
-  const [open,           setOpen]           = useState(false)
+  const [showSend,       setShowSend]       = useState(false)
   const [importError,    setImportError]    = useState(null)
-  const [webhookUrl,     setWebhookUrl]     = useState('')
-  const [webhookFormat,  setWebhookFormat]  = useState('events')
-  const [webhookStatus,  setWebhookStatus]  = useState(null)
-  const [webhookLoading, setWebhookLoading] = useState(false)
+  const [sendUrl,        setSendUrl]        = useState('')
+  const [sendFormat,     setSendFormat]     = useState('events')
+  const [sendStatus,     setSendStatus]     = useState(null)
+  const [sendLoading,    setSendLoading]    = useState(false)
   const fileRef = useRef()
 
   function handleFile(e) {
@@ -88,18 +89,18 @@ export default function ImportExport({ events, rabbits, confidence, contribution
     reader.readAsText(file)
   }
 
-  async function handleWebhookSend() {
-    const url = webhookUrl.trim()
+  async function handleSend() {
+    const url = sendUrl.trim()
     if (!url) return
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      setWebhookStatus({ ok: false, message: 'URL должен начинаться с http:// или https://' })
+      setSendStatus({ ok: false, message: 'Ссылка должна начинаться с http:// или https://' })
       return
     }
 
-    setWebhookLoading(true)
-    setWebhookStatus(null)
+    setSendLoading(true)
+    setSendStatus(null)
 
-    const payload = webhookFormat === 'events'
+    const payload = sendFormat === 'events'
       ? events
       : buildReport(events, rabbits, confidence, contributions, byZone)
 
@@ -111,74 +112,79 @@ export default function ImportExport({ events, rabbits, confidence, contribution
         signal:  AbortSignal.timeout(15000),
       })
       const data = await res.json()
-      if (data.ok) {
-        setWebhookStatus({ ok: true, message: `Отправлено ✓  (HTTP ${data.status})` })
-      } else {
-        setWebhookStatus({ ok: false, message: data.error ?? `HTTP ${data.status}` })
-      }
+      setSendStatus(data.ok
+        ? { ok: true,  message: `Отправлено ✓  (HTTP ${data.status})` }
+        : { ok: false, message: data.error ?? `HTTP ${data.status}` }
+      )
     } catch {
-      setWebhookStatus({ ok: false, message: 'Ошибка соединения с сервером' })
+      setSendStatus({ ok: false, message: 'Ошибка соединения с сервером' })
     } finally {
-      setWebhookLoading(false)
+      setSendLoading(false)
     }
   }
 
   return (
-    <div className="import-export-wrap">
+    <div className="ie-root">
       <input type="file" accept=".json" ref={fileRef} style={{ display: 'none' }} onChange={handleFile} />
 
-      <button className="import-export-toggle" onClick={() => setOpen(o => !o)}>
-        <span>📥📤 Импорт / Экспорт</span>
-        <span>{open ? '▲' : '▼'}</span>
-      </button>
+      <div className="ie-section-title">📥📤 Экспорт данных</div>
 
-      {open && (
-        <div className="import-export-body">
-          <div className="ie-buttons">
-            <button className="btn-ghost" onClick={() => fileRef.current.click()}>
-              📥 Загрузить .json
-            </button>
-            <button className="btn-ghost" onClick={() => downloadJson(events, 'bunfarm-events.json')}>
-              📤 Скачать события
-            </button>
-            <button className="btn-ghost" onClick={() => downloadJson(buildReport(events, rabbits, confidence, contributions, byZone), 'bunfarm-report.json')}>
-              📄 Скачать отчёт
-            </button>
-          </div>
+      <div className="ie-actions">
+        <button className="btn-primary ie-btn" onClick={() => fileRef.current.click()}>
+          📥 Загрузить .json
+        </button>
+        <button className="btn-primary ie-btn" onClick={() => downloadJson(events, 'bunfarm-events.json')}>
+          📤 Скачать события
+        </button>
+        <button className="btn-primary ie-btn" onClick={() => downloadJson(
+          buildReport(events, rabbits, confidence, contributions, byZone),
+          'bunfarm-report.json'
+        )}>
+          📄 Скачать отчёт
+        </button>
+      </div>
 
-          {importError && <div className="ie-error">⚠️ {importError}</div>}
+      {importError && <div className="ie-error">⚠️ {importError}</div>}
 
-          <div className="webhook-section">
-            <div className="webhook-label">🌐 Отправить на вебхук</div>
-            <input
-              type="text"
-              className="webhook-url-input"
-              placeholder="https://example.com/webhook"
-              value={webhookUrl}
-              onChange={e => setWebhookUrl(e.target.value)}
+      <div className="ie-send-header">
+        <button className="ie-send-toggle" onClick={() => setShowSend(o => !o)}>
+          <span>🌐 Отправить отчёт по ссылке</span>
+          <span className="ie-send-arrow">{showSend ? '▲' : '▼'}</span>
+        </button>
+        <Tip text="Отчёт уйдёт POST-запросом на указанный адрес — удобно, чтобы передать данные в другую систему." />
+      </div>
+
+      {showSend && (
+        <div className="ie-send-body">
+          <label className="ie-field-label">Ссылка для отправки отчёта</label>
+          <input
+            type="text"
+            className="webhook-url-input"
+            placeholder="https://example.com/hook"
+            value={sendUrl}
+            onChange={e => setSendUrl(e.target.value)}
+          />
+          <div className="webhook-format-row">
+            <span>Формат:</span>
+            <Dropdown
+              options={FORMAT_OPTIONS}
+              value={sendFormat}
+              onChange={setSendFormat}
+              className="webhook-format-dropdown"
             />
-            <div className="webhook-format-row">
-              <span>Формат:</span>
-              <Dropdown
-                options={FORMAT_OPTIONS}
-                value={webhookFormat}
-                onChange={setWebhookFormat}
-                className="webhook-format-dropdown"
-              />
-              <button
-                className="btn-primary"
-                onClick={handleWebhookSend}
-                disabled={!webhookUrl.trim() || webhookLoading}
-              >
-                {webhookLoading ? '…' : 'Отправить'}
-              </button>
-            </div>
-            {webhookStatus && (
-              <div className={`webhook-status ${webhookStatus.ok ? 'ok' : 'err'}`}>
-                {webhookStatus.message}
-              </div>
-            )}
+            <button
+              className="btn-primary ie-btn"
+              onClick={handleSend}
+              disabled={!sendUrl.trim() || sendLoading}
+            >
+              {sendLoading ? '…' : 'Отправить'}
+            </button>
           </div>
+          {sendStatus && (
+            <div className={`webhook-status ${sendStatus.ok ? 'ok' : 'err'}`}>
+              {sendStatus.message}
+            </div>
+          )}
         </div>
       )}
     </div>

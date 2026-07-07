@@ -1124,39 +1124,30 @@
   pointer-events: none;
 }
 
-/* ── Import / Export panel ── */
-.import-export-toggle {
-  width: 100%;
-  background: var(--panel-header);
-  color: var(--panel-header-text);
-  border: none;
-  border-radius: 3px;
-  padding: 8px 14px;
-  text-align: left;
-  font-size: 1rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.import-export-toggle:hover { background: #6b3e1e; }
-
-.import-export-body {
-  padding: 10px 9px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: rgba(245,230,200,0.4);
-  border: 2px solid var(--panel-border);
-  border-top: none;
-  border-radius: 0 0 3px 3px;
+/* ── Import / Export (inlined into journal panel) ── */
+.ie-root {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--panel-border);
 }
 
-.ie-buttons {
+.ie-section-title {
+  font-size: 0.88rem;
+  color: var(--panel-header);
+  margin-bottom: 7px;
+  letter-spacing: 0.3px;
+}
+
+.ie-actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.ie-btn {
+  font-size: 0.85rem;
+  padding: 3px 10px;
 }
 
 .ie-error {
@@ -1167,17 +1158,48 @@
   padding: 4px 8px;
   border-radius: 0 3px 3px 0;
   line-height: 1.4;
+  margin-bottom: 4px;
 }
 
-.webhook-section {
-  border-top: 1px dashed var(--panel-border);
-  padding-top: 8px;
+.ie-send-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
 }
 
-.webhook-label {
-  font-size: 0.88rem;
+.ie-send-toggle {
+  flex: 1;
+  background: rgba(92,51,25,0.07);
+  border: none;
+  border-radius: 3px;
   color: var(--panel-header);
-  margin-bottom: 5px;
+  font-size: 0.88rem;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  font-family: var(--font);
+  text-align: left;
+  transition: background 0.1s;
+}
+.ie-send-toggle:hover { background: rgba(92,51,25,0.14); }
+
+.ie-send-arrow { font-size: 0.65rem; color: var(--panel-header); }
+
+.ie-send-body {
+  padding: 8px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ie-field-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: -2px;
 }
 
 .webhook-url-input {
@@ -1201,13 +1223,11 @@
   flex-wrap: nowrap;
   font-size: 0.82rem;
   color: var(--text-muted);
-  margin-top: 5px;
 }
 .webhook-format-dropdown { width: 130px; flex-shrink: 0; }
 
 .webhook-status {
   font-size: 0.84rem;
-  margin-top: 3px;
 }
 .webhook-status.ok  { color: #5a8a30; }
 .webhook-status.err { color: var(--danger); }
