@@ -1,10 +1,10 @@
-import { eventContribution, CONFIDENCE_WEIGHTS } from './model.js'
+import { CONFIDENCE_WEIGHTS } from './model.js'
 
 // Computes the three confidence sub-factors for UI display.
-//
-// Zone consistency here uses raw events (model.js uses collapsed events
-// internally). Values track closely; the small deviation only shows when
-// duplicate same-type+same-zone signals are present.
+// Uses raw events (not collapsed) — matches model.js closely enough for display;
+// small deviations only appear when same-type+zone duplicates are present.
+const timeToMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+
 export function getConfidenceFactors(events, params) {
   if (!events.length) {
     return { diversity: 0, avgIntensity: 0, consistency: 0 }
@@ -16,21 +16,23 @@ export function getConfidenceFactors(events, params) {
   const avgIntensity =
     events.reduce((s, e) => s + e.intensity, 0) / events.length / 10
 
-  const zoneTotals = {}
-  for (const evt of events) {
-    zoneTotals[evt.location] =
-      (zoneTotals[evt.location] ?? 0) + eventContribution(evt, params)
-  }
-  const vals = Object.values(zoneTotals)
-  let consistency = 1
-  if (vals.length > 1) {
-    const mean = vals.reduce((s, v) => s + v, 0) / vals.length
-    if (mean > 0) {
-      const variance = vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
-      const cv = Math.sqrt(variance) / mean
-      consistency = Math.max(0, 1 - Math.min(cv, 1))
+  // Time-aware cross-zone consistency (mirrors model.js calculateConfidence logic).
+  // dt=0 different zones   → clear (definitely different rabbits, picture sharp).
+  // 0 < dt ≤ window        → ambiguous (possibly one rabbit moving between zones).
+  // dt > window / same zone → excluded (neutral, no cross-zone information).
+  // Scale: 0.5 neutral → 1.0 all-simultaneous → 0.0 all-ambiguous.
+  const mvWindow = params.movementWindowMinutes ?? 30
+  let clearPairs = 0, ambiguousPairs = 0
+  for (let i = 0; i < events.length; i++) {
+    for (let j = i + 1; j < events.length; j++) {
+      if (events[i].location === events[j].location) continue
+      const dt = Math.abs(timeToMin(events[i].time) - timeToMin(events[j].time))
+      if (dt === 0)            clearPairs++
+      else if (dt <= mvWindow) ambiguousPairs++
     }
   }
+  const totalCross = clearPairs + ambiguousPairs
+  const consistency = totalCross === 0 ? 0.5 : clearPairs / totalCross
 
   return { diversity, avgIntensity, consistency }
 }
