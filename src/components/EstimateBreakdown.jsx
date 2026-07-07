@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { getConfidenceFactors } from '../confidence.js'
+import { latestEventTime, freshnessMultiplier } from '../model.js'
 import {
-  signalRole, reliabilityNote, buildSignalNote,
+  signalRole, reliabilityNote, buildSignalNote, freshnessNote,
   diversityConsequence, intensityConsequence, consistencyConsequence,
 } from '../reportText.js'
 import Tip from './Tip.jsx'
@@ -18,9 +19,9 @@ function ModelExplanation() {
       {open && (
         <div className="me-body">
 
-          {/* ── 5 factors ── */}
+          {/* ── 6 factors ── */}
           <div className="me-block">
-            <div className="me-block-title">На оценку влияют 5 вещей:</div>
+            <div className="me-block-title">На оценку влияют 6 вещей:</div>
 
             <div className="me-group">
               <div className="me-group-header">📋 Из твоих наблюдений (Журнал сигналов):</div>
@@ -52,6 +53,9 @@ function ModelExplanation() {
                 <li>
                   <strong>Скорость перемещения</strong> — как далеко кролик мог уйти между зонами. Влияет на то, считаем ли следы в разных местах разными кроликами или одним перешедшим.
                 </li>
+                <li>
+                  <strong>Свежесть следа</strong> — старые следы учитываются слабее свежих. Насколько резко убывает вес — настраивается в «Как быстро выцветают следы».
+                </li>
               </ol>
             </div>
           </div>
@@ -61,7 +65,7 @@ function ModelExplanation() {
             <div className="me-block-title">Как считается (3 шага):</div>
             <ol className="me-steps">
               <li>
-                <strong>Каждый след → кролики:</strong> Сколько × курс × доверие × заметность.
+                <strong>Каждый след → кролики:</strong> Сколько × курс × доверие × заметность × свежесть.
               </li>
               <li>
                 <strong>Схлопываем дубли:</strong> одинаковые следы рядом по времени и месту — один кролик наследил. Следы в разных зонах близко по времени тоже можем счесть одним, если кролик успел перейти (зависит от скорости перемещения).
@@ -108,6 +112,7 @@ export default function EstimateBreakdown({ rabbits, confidence, contributions, 
   const evtMap      = useMemo(() => Object.fromEntries(events.map(e => [e.id, e])), [events])
   const uniqueTypes = useMemo(() => new Set(events.map(e => e.event)).size, [events])
   const totalValue  = useMemo(() => contributions.reduce((s, c) => s + c.value, 0), [contributions])
+  const latestTime  = useMemo(() => events.length ? latestEventTime(events) : 0, [events])
 
   const ranked = useMemo(() => {
     return [...contributions]
@@ -121,10 +126,11 @@ export default function EstimateBreakdown({ rabbits, confidence, contributions, 
         const role        = signalRole(pct)
         const rel         = params.reliability[evt.event] ?? 0.5
         const note        = buildSignalNote(pct, rel, isCollapsed)
-        return { ...c, evt, meta, isCollapsed, pct, role, note }
+        const fnote       = !isCollapsed ? freshnessNote(freshnessMultiplier(evt, latestTime, params)) : null
+        return { ...c, evt, meta, isCollapsed, pct, role, note, fnote }
       })
       .filter(Boolean)
-  }, [contributions, evtMap, totalValue, params])
+  }, [contributions, evtMap, totalValue, params, latestTime])
 
   return (
     <div className="breakdown-body">
@@ -159,7 +165,10 @@ export default function EstimateBreakdown({ rabbits, confidence, contributions, 
                         <div className={`bd-share-fill ${item.role.cls}`}
                              style={{ width: `${item.pct}%` }} />
                       </div>
-                      <span className="bd-signal-note">{item.note}</span>
+                      <span className="bd-signal-note">
+                        {item.note}
+                        {item.fnote && ` · ${item.fnote}`}
+                      </span>
                     </div>
                   )}
                   {item.isCollapsed && (

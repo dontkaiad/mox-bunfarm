@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_PARAMS,
   eventContribution,
+  freshnessMultiplier,
+  latestEventTime,
   calculateRabbits,
   calculateConfidence,
   calculateContributions,
@@ -57,8 +59,12 @@ describe('calculateRabbits', () => {
       evt({ id: 'a', event: 'motion_sensor', location: 'Сарай', count: 1, intensity: 8, time: '10:00' }),
       evt({ id: 'b', event: 'motion_sensor', location: 'Сарай', count: 1, intensity: 8, time: '11:05' }),
     ]
-    const single = eventContribution(events[0], DEFAULT_PARAMS)
-    expect(calculateRabbits(events, DEFAULT_PARAMS)).toBeCloseTo(single * 2)
+    // latestTime=665; a: elapsed=65 → fresh≈0.783; b: elapsed=0 → fresh=1.0
+    const latestTime = 11 * 60 + 5
+    const expected =
+      eventContribution(events[0], DEFAULT_PARAMS, latestTime) +
+      eventContribution(events[1], DEFAULT_PARAMS, latestTime)
+    expect(calculateRabbits(events, DEFAULT_PARAMS)).toBeCloseTo(expected)
   })
 
   it('does NOT collapse different types in the same location', () => {
@@ -66,9 +72,11 @@ describe('calculateRabbits', () => {
       evt({ id: 'a', event: 'motion_sensor',   location: 'Сарай', count: 1, intensity: 8, time: '10:00' }),
       evt({ id: 'b', event: 'rustle_detected', location: 'Сарай', count: 1, intensity: 8, time: '10:10' }),
     ]
+    // latestTime=610; a: elapsed=10 → fresh≈0.967; b: elapsed=0 → fresh=1.0
+    const latestTime = 10 * 60 + 10
     const expected =
-      eventContribution(events[0], DEFAULT_PARAMS) +
-      eventContribution(events[1], DEFAULT_PARAMS)
+      eventContribution(events[0], DEFAULT_PARAMS, latestTime) +
+      eventContribution(events[1], DEFAULT_PARAMS, latestTime)
     expect(calculateRabbits(events, DEFAULT_PARAMS)).toBeCloseTo(expected)
   })
 
@@ -92,7 +100,10 @@ describe('calculateRabbits', () => {
       evt({ id: 'b', count: 1, intensity: 5, time: '10:20' }),
       evt({ id: 'c', count: 1, intensity: 2, time: '10:40' }),
     ]
-    const hiScore = eventContribution(events[1], DEFAULT_PARAMS)
+    // latestTime=640; a: fresh≈0.867 → score≈0.047; b: fresh≈0.933 → score≈0.084; c: fresh=1.0 → score=0.036
+    // winner is b (highest freshness-adjusted contribution)
+    const latestTime = 10 * 60 + 40
+    const hiScore = eventContribution(events[1], DEFAULT_PARAMS, latestTime)
     expect(calculateRabbits(events, DEFAULT_PARAMS)).toBeCloseTo(hiScore)
   })
 
@@ -271,31 +282,40 @@ describe('cross-zone movement correction', () => {
       evt({ id: 'a', location: 'Огород',  time: '10:00' }),
       evt({ id: 'b', location: 'Теплица', time: '10:20' }),
     ]
-    const raw = eventContribution(events[0], P) + eventContribution(events[1], P)
     const result = calculateRabbits(events, P)
-    expect(result).toBeLessThan(raw)
+    const rawSum = eventContribution(events[0], P) + eventContribution(events[1], P)
+    expect(result).toBeLessThan(rawSum)
     expect(result).toBeGreaterThan(0)
-    // Both events identical → smaller === either → reduction = value * 0.5
-    const val = eventContribution(events[0], P)
-    expect(result).toBeCloseTo(raw - val * 0.5)
+    // latestTime=620; a: elapsed=20 → fresh≈0.933 < b: elapsed=0 → fresh=1.0
+    // a has lower freshness-adjusted value → a is the smaller → reduction = valA * 0.5
+    const latestTime = 10 * 60 + 20
+    const valA = eventContribution(events[0], P, latestTime)
+    const valB = eventContribution(events[1], P, latestTime)
+    expect(result).toBeCloseTo(valB + valA * 0.5)
   })
 
   it('time beyond window → no correction', () => {
     const events = [
       evt({ id: 'a', location: 'Огород',  time: '10:00' }),
-      evt({ id: 'b', location: 'Теплица', time: '10:35' }), // 35 min > 30-min window
+      evt({ id: 'b', location: 'Теплица', time: '10:35' }), // 35 min > 30-min movement window
     ]
-    const expected = eventContribution(events[0], P) + eventContribution(events[1], P)
+    // latestTime=635; a: elapsed=35 → fresh≈0.883; b: elapsed=0 → fresh=1.0
+    const latestTime = 10 * 60 + 35
+    const expected =
+      eventContribution(events[0], P, latestTime) +
+      eventContribution(events[1], P, latestTime)
     expect(calculateRabbits(events, P)).toBeCloseTo(expected)
   })
 
   it('reduction targets the smaller-contribution event only', () => {
     const strong = evt({ id: 's', location: 'Сарай',   event: 'motion_sensor', count: 3, intensity: 9, time: '10:00' })
     const weak   = evt({ id: 'w', location: 'Теплица', event: 'footprints',    count: 1, intensity: 2, time: '10:15' })
-    const weakVal   = eventContribution(weak,   P)
-    const strongVal = eventContribution(strong, P)
+    // latestTime=615; strong: elapsed=15 → fresh≈0.95; weak: elapsed=0 → fresh=1.0
+    // Weak still much smaller even with freshness → reduction targets weak only
+    const latestTime = 10 * 60 + 15
+    const weakVal   = eventContribution(weak,   P, latestTime)
+    const strongVal = eventContribution(strong, P, latestTime)
     const result = calculateRabbits([strong, weak], P)
-    // Weak is smaller → reduction = weakVal * 0.5 subtracted from weak only
     expect(result).toBeCloseTo(strongVal + weakVal * 0.5)
   })
 
@@ -315,7 +335,11 @@ describe('cross-zone movement correction', () => {
       evt({ id: 'a', location: 'Огород',  time: '10:00' }),
       evt({ id: 'b', location: 'Теплица', time: '10:01' }),
     ]
-    const expected = eventContribution(events[0], noMovement) + eventContribution(events[1], noMovement)
+    // latestTime=601; a: elapsed=1 → fresh≈0.997; no movement correction (window=0)
+    const latestTime = 10 * 60 + 1
+    const expected =
+      eventContribution(events[0], noMovement, latestTime) +
+      eventContribution(events[1], noMovement, latestTime)
     expect(calculateRabbits(events, noMovement)).toBeCloseTo(expected)
   })
 })
@@ -417,7 +441,64 @@ describe('custom signal types', () => {
       evt({ id: 'lo', event: 'my_sign', location: 'Огород', count: 1, intensity: 3, time: '10:00' }),
       evt({ id: 'hi', event: 'my_sign', location: 'Огород', count: 1, intensity: 9, time: '10:30' }),
     ]
-    const hiScore = eventContribution(events[1], customParams)
+    // latestTime=630; hi: elapsed=0 → fresh=1.0; hi wins collapse
+    const latestTime = 10 * 60 + 30
+    const hiScore = eventContribution(events[1], customParams, latestTime)
     expect(calculateRabbits(events, customParams)).toBeCloseTo(hiScore)
+  })
+})
+
+describe('signal freshness', () => {
+  it('freshest event (elapsed=0) keeps full contribution', () => {
+    const e = evt({ event: 'footprints', count: 1, intensity: 10, time: '10:00' })
+    const base = eventContribution(e, DEFAULT_PARAMS)
+    const withFresh = eventContribution(e, DEFAULT_PARAMS, 10 * 60)
+    expect(withFresh).toBeCloseTo(base) // freshness=1.0 at elapsed=0
+  })
+
+  it('contribution decreases as event ages relative to latest', () => {
+    const e = evt({ event: 'footprints', count: 1, intensity: 10, time: '10:00' })
+    const at30  = eventContribution(e, DEFAULT_PARAMS, 10 * 60 + 30)
+    const at90  = eventContribution(e, DEFAULT_PARAMS, 10 * 60 + 90)
+    const at150 = eventContribution(e, DEFAULT_PARAMS, 10 * 60 + 150)
+    expect(at30).toBeGreaterThan(at90)
+    expect(at90).toBeGreaterThan(at150)
+  })
+
+  it('multiplier floors at 0.4 when elapsed >= window, never goes lower', () => {
+    const e = evt({ event: 'footprints', count: 1, intensity: 10, time: '10:00' })
+    const base = eventContribution(e, DEFAULT_PARAMS) // unfreshened
+    const atWindow   = eventContribution(e, DEFAULT_PARAMS, 10 * 60 + 180) // elapsed=window
+    const pastWindow = eventContribution(e, DEFAULT_PARAMS, 10 * 60 + 360) // elapsed=2×window
+    expect(atWindow).toBeCloseTo(base * 0.4)
+    expect(pastWindow).toBeCloseTo(base * 0.4)
+  })
+
+  it('changing freshnessWindowMinutes changes results', () => {
+    const events = [
+      evt({ id: 'a', location: 'Огород',  time: '09:00' }),
+      evt({ id: 'b', location: 'Теплица', time: '10:00' }),
+    ]
+    // event a is 60 min older than b; narrow window decays it more
+    const narrow = { ...DEFAULT_PARAMS, freshnessWindowMinutes: 60 }
+    const wide   = { ...DEFAULT_PARAMS, freshnessWindowMinutes: 360 }
+    expect(calculateRabbits(events, narrow)).toBeLessThan(calculateRabbits(events, wide))
+  })
+
+  it('freshnessMultiplier: elapsed=0 → 1.0, elapsed=window → 0.4, elapsed>window → 0.4', () => {
+    const e0   = evt({ time: '10:00' })
+    const P180 = DEFAULT_PARAMS
+    expect(freshnessMultiplier(e0, 10 * 60,       P180)).toBeCloseTo(1.0)
+    expect(freshnessMultiplier(e0, 10 * 60 + 180, P180)).toBeCloseTo(0.4)
+    expect(freshnessMultiplier(e0, 10 * 60 + 360, P180)).toBeCloseTo(0.4)
+  })
+
+  it('latestEventTime returns the maximum time across events', () => {
+    const events = [
+      evt({ time: '09:00' }),
+      evt({ time: '11:30' }),
+      evt({ time: '10:15' }),
+    ]
+    expect(latestEventTime(events)).toBe(11 * 60 + 30)
   })
 })

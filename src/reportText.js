@@ -25,6 +25,15 @@ export function buildSignalNote(pct, rel, isCollapsed) {
   return `${relNote}, почти не меняет итог`
 }
 
+// Short freshness annotation appended to the signal note in the breakdown.
+// multiplier ≥ 0.95 → very fresh; ≤ 0.6 → notably stale (weight visibly reduced).
+// Returns null for the "middle" range that needs no comment.
+export function freshnessNote(multiplier) {
+  if (multiplier >= 0.95) return 'свежий след'
+  if (multiplier <= 0.60) return 'давний след, вес снижен'
+  return null
+}
+
 // ── Confidence factor consequences ────────────────────────────────────────────
 export function diversityConsequence(value, uniqueTypes) {
   const pct = Math.round(value * 100)

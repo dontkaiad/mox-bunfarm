@@ -18,6 +18,9 @@ export const DEFAULT_PARAMS = {
   },
   // Cross-zone movement window in minutes (presets: медленно=60 / средне=30 / быстро=15)
   movementWindowMinutes: 30,
+  // Signal freshness decay window in minutes (presets: быстро=60 / средне=180 / медленно=360)
+  // elapsed=0 → multiplier 1.0; elapsed ≥ window → floor 0.4
+  freshnessWindowMinutes: 180,
 }
 
 // Confidence scoring weights - must sum to 1.0
@@ -38,16 +41,37 @@ function timeToMinutes(timeStr) {
   return h * 60 + m
 }
 
-export function eventContribution(evt, params) {
+// Returns the latest event time in minutes across the dataset.
+// "Now" = max observed time, not wall clock — keeps results stable when the app is reopened.
+export function latestEventTime(events) {
+  return Math.max(...events.map(e => timeToMinutes(e.time)))
+}
+
+// Freshness multiplier: 1.0 for the newest event, floors at 0.4 when elapsed ≥ window.
+// elapsed=0 → 1.0; elapsed=window → 0.4; elapsed>window → 0.4 (never zero)
+export function freshnessMultiplier(evt, latestTimeMinutes, params) {
+  const window = params.freshnessWindowMinutes ?? 180
+  const floor = 0.4
+  const elapsed = latestTimeMinutes - timeToMinutes(evt.time)
+  return floor + (1 - floor) * Math.max(0, 1 - elapsed / window)
+}
+
+// When latestTimeMinutes is provided, multiplies the base formula by signal freshness.
+// Called without latestTimeMinutes (= null) returns the raw unfreshened base value.
+export function eventContribution(evt, params, latestTimeMinutes = null) {
   const rpu = params.rabbitsPerUnit[evt.event] ?? 1
   const rel = params.reliability[evt.event] ?? 0.5
-  return evt.count * rpu * rel * (evt.intensity / 10)
+  const base = evt.count * rpu * rel * (evt.intensity / 10)
+  if (latestTimeMinutes === null) return base
+  return base * freshnessMultiplier(evt, latestTimeMinutes, params)
 }
 
 // ── Layer 1: same-type+same-zone collapse ──────────────────────────────────
 // Events clustered within COLLAPSE_WINDOW_MINUTES: keep the max-contribution
 // winner (they're the same rabbits seen multiple times in the same spot).
-function collapseEvents(events, params) {
+// Freshness is applied when picking the winner so a newer weaker signal can
+// beat an older stronger one.
+function collapseEvents(events, params, latestTime) {
   const groups = new Map()
   for (const evt of events) {
     const key = `${evt.event}::${evt.location}`
@@ -67,19 +91,19 @@ function collapseEvents(events, params) {
       if (t - clusterStart <= COLLAPSE_WINDOW_MINUTES) {
         cluster.push(sorted[i])
       } else {
-        result.push(pickBest(cluster, params))
+        result.push(pickBest(cluster, params, latestTime))
         cluster = [sorted[i]]
         clusterStart = t
       }
     }
-    result.push(pickBest(cluster, params))
+    result.push(pickBest(cluster, params, latestTime))
   }
   return result
 }
 
-function pickBest(cluster, params) {
+function pickBest(cluster, params, latestTime) {
   return cluster.reduce((best, cur) =>
-    eventContribution(cur, params) > eventContribution(best, params) ? cur : best
+    eventContribution(cur, params, latestTime) > eventContribution(best, params, latestTime) ? cur : best
   )
 }
 
@@ -90,14 +114,14 @@ function pickBest(cluster, params) {
 // event's contribution. Never zero it out — different rabbits remain possible.
 // Exclusion: timeDiff === 0 → simultaneous events in different zones are
 //            definitely different rabbits (no subtraction).
-function applyMovementCorrection(collapsedEvents, params) {
+function applyMovementCorrection(collapsedEvents, params, latestTime) {
   const windowMinutes = params.movementWindowMinutes ?? 30
   const n = collapsedEvents.length
   if (n < 2) {
-    return collapsedEvents.reduce((s, e) => s + eventContribution(e, params), 0)
+    return collapsedEvents.reduce((s, e) => s + eventContribution(e, params, latestTime), 0)
   }
 
-  const values = collapsedEvents.map(e => eventContribution(e, params))
+  const values = collapsedEvents.map(e => eventContribution(e, params, latestTime))
   // Accumulated reduction per event — applied at the end with a floor of 0
   const reductions = new Array(n).fill(0)
 
@@ -122,8 +146,9 @@ function applyMovementCorrection(collapsedEvents, params) {
 // Total estimated rabbit count (layer-1 collapse + layer-2 movement correction)
 export function calculateRabbits(events, params) {
   if (!events.length) return 0
-  const collapsed = collapseEvents(events, params)
-  return applyMovementCorrection(collapsed, params)
+  const latest = latestEventTime(events)
+  const collapsed = collapseEvents(events, params, latest)
+  return applyMovementCorrection(collapsed, params, latest)
 }
 
 // Confidence score 0..100 from three weighted factors
@@ -145,7 +170,7 @@ export function calculateConfidence(events, params, knownTypeCount = 5) {
   //   dt > mvWindow       → unrelated sightings → neutral (excluded from analysis)
   //   same zone           → excluded (no cross-zone information)
   // Scale: 0.5 = neutral (no cross-zone pairs), 1.0 = all simultaneous, 0.0 = all ambiguous.
-  const collapsed = collapseEvents(events, params)
+  const collapsed = collapseEvents(events, params, latestEventTime(events))
   const mvWindow  = params.movementWindowMinutes ?? 30
   let clearPairs     = 0
   let ambiguousPairs = 0
@@ -174,11 +199,12 @@ export function calculateConfidence(events, params, knownTypeCount = 5) {
 // relative signal importance, not exact fractions of the corrected total.
 export function calculateContributions(events, params) {
   if (!events.length) return []
-  const collapsed = collapseEvents(events, params)
+  const latest = latestEventTime(events)
+  const collapsed = collapseEvents(events, params, latest)
   const winnerIds = new Set(collapsed.map(e => e.id))
   const scores = events.map(evt => ({
     id: evt.id,
-    value: winnerIds.has(evt.id) ? eventContribution(evt, params) : 0,
+    value: winnerIds.has(evt.id) ? eventContribution(evt, params, latest) : 0,
   }))
   const total = scores.reduce((s, c) => s + c.value, 0)
   if (total === 0) return scores.map(c => ({ ...c, percent: 0 }))
@@ -189,14 +215,21 @@ export function calculateContributions(events, params) {
 }
 
 // Rabbit estimate per farm zone (layer-1 collapse only; no cross-zone correction
-// since each zone's subset has no cross-zone pairs by definition)
+// since each zone's subset has no cross-zone pairs by definition).
+// latestTime is computed from ALL events so per-zone freshness is consistent
+// with the global timeline, not each zone's local subset.
 export function calculateByZone(events, params) {
+  if (!events.length) return {}
+  const latest = latestEventTime(events)
   const zones = {}
   for (const evt of events) {
     if (!zones[evt.location]) zones[evt.location] = []
     zones[evt.location].push(evt)
   }
   return Object.fromEntries(
-    Object.entries(zones).map(([loc, evts]) => [loc, calculateRabbits(evts, params)])
+    Object.entries(zones).map(([loc, evts]) => {
+      const collapsed = collapseEvents(evts, params, latest)
+      return [loc, applyMovementCorrection(collapsed, params, latest)]
+    })
   )
 }

@@ -15,6 +15,12 @@ const MOVEMENT_PRESETS = [
   { label: 'быстро',   value: 15 },
 ]
 
+const FRESHNESS_PRESETS = [
+  { label: 'быстро',   value: 60 },
+  { label: 'средне',   value: 180 },
+  { label: 'медленно', value: 360 },
+]
+
 function closestPreset(current, presets) {
   return presets.reduce((best, p) =>
     Math.abs(p.value - current) < Math.abs(best.value - current) ? p : best
@@ -67,6 +73,22 @@ export default function ModelParams({ params, onUpdate, hint, eventMeta, eventTy
           onSelect={v => onUpdate('movementWindowMinutes', null, v)}
         />
         {hint?.target === 'movementWindowMinutes' && (
+          <div className="param-hint">💡 {hint.text}</div>
+        )}
+      </div>
+
+      {/* Freshness decay window — categorical, 3-preset */}
+      <div className="param-block">
+        <div className="param-type-label">
+          ⏱️ Как быстро выцветают следы{' '}
+          <Tip text="Свежие следы значат больше старых. Быстро — старые следы почти не учитываются; медленно — вес падает не так резко." />
+        </div>
+        <PresetGroup
+          presets={FRESHNESS_PRESETS}
+          current={params.freshnessWindowMinutes}
+          onSelect={v => onUpdate('freshnessWindowMinutes', null, v)}
+        />
+        {hint?.target === 'freshnessWindowMinutes' && (
           <div className="param-hint">💡 {hint.text}</div>
         )}
       </div>

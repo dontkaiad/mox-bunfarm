@@ -135,7 +135,9 @@ export default function App() {
       const direction = diff > 0 ? 'выросла' : 'снизилась'
       let subject
       if (type === null) {
-        subject = 'поправка на перемещение изменилась'
+        subject = category === 'freshnessWindowMinutes'
+          ? 'скорость выцветания следов изменилась'
+          : 'поправка на перемещение изменилась'
       } else if (category === 'reliability') {
         const verb = diff > 0 ? 'сильнее' : 'слабее'
         const label = allEventMeta[type]?.label?.toLowerCase() ?? type
