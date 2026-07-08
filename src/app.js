@@ -771,8 +771,8 @@ function render() {
   }
 
   document.getElementById('root').innerHTML = `<div style="min-height:100vh;background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.04),transparent 40%),#1e4d2b;padding:16px;display:flex;flex-direction:column;align-items:center;color:#3d1f00;font-size:16px;"><div style="width:100%;max-width:1100px;display:flex;flex-direction:column;gap:0;">
-    <div style="background:linear-gradient(#3f5c3a,#2e4429);border:4px solid #1f2f1c;border-radius:8px 8px 0 0;box-shadow:5px 5px 0 rgba(0,0,0,.5);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;flex-wrap:wrap;">
-      <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+    <div style="background:linear-gradient(#3f5c3a,#2e4429);border:4px solid #1f2f1c;border-radius:8px 8px 0 0;box-shadow:5px 5px 0 rgba(0,0,0,.5);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;">
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;">
         <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
           <div style="color:#f9e9bc;font-family:'Almendra',serif;font-weight:700;font-size:22px;letter-spacing:.3px;white-space:nowrap;text-shadow:2px 2px 0 rgba(0,0,0,.55),0 0 14px rgba(232,160,32,.25);">Ферма невидимых кроликов</div>
           <div style="color:rgba(255,255,255,.6);font-size:10px;letter-spacing:.3px;white-space:nowrap;padding-bottom:2px;">Тестовое задание AI-first Developer · MOX · Карина Ларк</div>
@@ -780,7 +780,7 @@ function render() {
         ${explanation?`<div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border:1px solid rgba(240,220,174,.2);border-radius:6px;padding:6px 12px;color:rgba(245,230,200,.85);font-size:.85rem;line-height:1.4;"><span style="font-size:14px;flex-shrink:0;">📜</span><span>${explanation}</span></div>`:''}
         <div style="display:flex;gap:6px;overflow-x:auto;">${tabsHTML}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;margin-left:auto;">
+      <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
         <div onclick="window._BF.openScorePopup()" style="width:200px;height:48px;display:flex;align-items:center;justify-content:center;gap:10px;background:#2b1c10;border:2px solid #1a1008;border-radius:8px;padding:0 14px;cursor:pointer;box-sizing:border-box;" title="Разбор оценки">
           <span style="font-size:18px;">🥕</span>
           <div style="color:#f0dcae;font-size:12px;line-height:1.2;white-space:nowrap;">
