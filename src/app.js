@@ -737,15 +737,22 @@ render()
 
 function fetchLlmRecs() {
   setState({ llmLoading: true })
+  const { events, params } = state
+  const rabbits      = calculateRabbits(events, params)
+  const confidence   = calculateConfidence(events, params, EVENT_TYPES.length)
+  const byZone       = calculateByZone(events, params)
+  const contributions = calculateContributions(events, params)
+    .map(c => ({ id: c.id, percent: c.percent ?? 0 }))
   fetch('/api/advise', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ events: state.events, params: state.params }),
+    body: JSON.stringify({ rabbits, confidence, events, contributions, byZone, params }),
   })
-    .then(r => r.ok ? r.json() : null)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(data => {
-      const recs = data?.recommendations ?? data?.recs ?? null
-      setState({ llmRecs: Array.isArray(recs) ? recs : null, llmLoading: false })
+      const recs = Array.isArray(data?.recommendations) && data.recommendations.length
+        ? data.recommendations : null
+      setState({ llmRecs: recs, llmLoading: false })
     })
     .catch(() => setState({ llmLoading: false }))
 }
