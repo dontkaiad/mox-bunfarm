@@ -24,3 +24,18 @@ docker-compose.override.yml
 *.njsproj
 *.sln
 *.sw?
+
+# Vite dependency cache
+.vite/
+
+# App runtime exports (generated files, not source)
+bunfarm-events*.json
+bunfarm-report*.json
+bunfarm-report*.pdf
+
+# Stardew Valley source spritesheets (processed versions live in public/assets/)
+PC *
+Dirt *
+
+# Root-level assets/ duplicate (app uses public/assets/ served by Vite)
+/assets/

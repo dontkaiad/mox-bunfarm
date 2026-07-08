@@ -93,6 +93,8 @@ docker compose up -d
 
 API поднимается внутри Docker-сети (`expose`, не `ports`), снаружи недоступен — только через Caddy-прокси.
 
+> **Примечание:** `docker-compose.yml` использует внешнюю сеть `nexus-arcana_default` (личная инфраструктура автора). При деплое в другом окружении замени имя сети или удали секцию `networks`.
+
 ---
 
 ## Переменные окружения
@@ -119,12 +121,15 @@ npm test    # 43 юнит-теста модели расчёта
 
 ```
 ├── src/
-│   ├── app.js              — главный рендер, state, обработчики
+│   ├── app.js              — главный рендер, state, обработчики (vanilla JS)
 │   ├── model.js            — расчёт кроликов, уверенности, вкладов
 │   ├── model.test.js       — 43 юнит-теста
-│   ├── data.js             — стартовые события и метаданные
+│   ├── data.js             — стартовые события и метаданные типов сигналов
 │   ├── confidence.js       — факторы уверенности для UI
-│   └── components/         — Tip, Dropdown, ModelParams и другие
+│   ├── rabbitRange.js      — форматирование диапазона оценки
+│   ├── explainer.js        — генерация текстового описания оценки
+│   ├── reportText.js       — тексты для PDF-отчёта и разбора сигналов
+│   └── pdfReport.js        — генерация PDF (jsPDF + html2canvas, lazy-loaded)
 ├── api/
 │   ├── main.py             — FastAPI: /api/advise → Claude Haiku
 │   └── requirements.txt

@@ -14,15 +14,6 @@ const ZONE_LAYOUT = {
 }
 const MOVEMENT_PRESETS  = [{label:'медленно',value:60},{label:'средне',value:30},{label:'быстро',value:15}]
 const FRESHNESS_PRESETS = [{label:'быстро',value:60},{label:'средне',value:180},{label:'медленно',value:360}]
-const WORKLOG = [
-  {status:'done', title:'Анализ задания и архитектурные решения'},
-  {status:'done', title:'Модель расчёта (src/model.js)'},
-  {status:'done', title:'Юнит-тесты (vitest, 22 кейса)'},
-  {status:'done', title:'UI: тема Stardew Valley, иллюстрированная карта, попапы'},
-  {status:'todo', title:'FastAPI бэкенд + интеграция Anthropic API'},
-  {status:'todo', title:'Docker + docker-compose'},
-  {status:'todo', title:'README и итоговая документация'},
-]
 
 const GARDEN_CROP_CYCLE = [
   'assets/crop-leafy.png','assets/crop-potted.png','assets/sv-cauliflower.png',
@@ -286,7 +277,10 @@ window._BF = {
           if (typeof item.time !== 'string' || !/^\d{2}:\d{2}$/.test(item.time)) throw new Error(pfx + 'time должен быть в формате ЧЧ:ММ')
         }
         input.value = ''
-        setState({ events: data, importError: null })
+        setState(s => ({
+          events: [...s.events, ...data.filter(d => !s.events.some(e => e.id === d.id))],
+          importError: null,
+        }))
       } catch (err) {
         input.value = ''
         setState({ importError: err.message })
