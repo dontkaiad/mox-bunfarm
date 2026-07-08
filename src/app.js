@@ -98,6 +98,11 @@ let state = {
   isAddingNew: false,
   newDraft: null,
   explainerOpen: false,
+  llmRecs: null,
+  llmLoading: false,
+  customButtons: [],
+  nextCqbId: 1,
+  showCqbForm: false,
 }
 
 function setState(patch) {
@@ -149,6 +154,33 @@ window._BF = {
     const d = state.newDraft
     setState(s => ({ events: [...s.events, { ...d, id: 'evt_' + Date.now() }], isAddingNew: false, newDraft: null }))
   },
+  addCustomButton(data) {
+    setState(s => ({
+      customButtons: [...s.customButtons, { ...data, id: 'cqb_' + s.nextCqbId }],
+      nextCqbId: s.nextCqbId + 1,
+      showCqbForm: false,
+    }))
+  },
+  deleteCustomButton(id) { setState(s => ({ customButtons: s.customButtons.filter(b => b.id !== id) })) },
+  fireCustomButton(id) {
+    const b = state.customButtons.find(x => x.id === id)
+    if (!b) return
+    const now = new Date().toTimeString().slice(0, 5)
+    setState(s => ({
+      events: [...s.events, { ...b, id: 'evt_' + Date.now(), time: now }],
+      activeTab: 'map',
+    }))
+  },
+  saveCustomButton() {
+    const label    = document.getElementById('cqb-label')?.value.trim()
+    const event    = document.getElementById('cqb-event')?.value
+    const location = document.getElementById('cqb-location')?.value
+    const count    = +document.getElementById('cqb-count')?.value || 1
+    const intensity= +document.getElementById('cqb-int')?.value   || 5
+    if (!label) return
+    window._BF.addCustomButton({ label, event, location, count, intensity })
+  },
+  toggleCqbForm() { setState(s => ({ showCqbForm: !s.showCqbForm })) },
   updateMovement(value) { setState(s => ({ params: { ...s.params, movementWindowMinutes: +value } })) },
   updateFreshness(value) { setState(s => ({ params: { ...s.params, freshnessWindowMinutes: +value } })) },
   updateReliability(type, value) {
@@ -350,7 +382,22 @@ function render() {
     </div>`
   }
 
+  function tip(text) {
+    const escaped = text.replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+    return `<span style="position:relative;display:inline-block;">
+      <button type="button"
+        style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#8b5e3c;border:none;color:#f5e6c8;font-size:11px;font-weight:bold;cursor:pointer;vertical-align:middle;margin-left:5px;flex-shrink:0;line-height:1;"
+        onmouseenter="this.nextElementSibling.style.display='block'"
+        onmouseleave="this.nextElementSibling.style.display='none'"
+        onfocus="this.nextElementSibling.style.display='block'"
+        onblur="this.nextElementSibling.style.display='none'"
+        aria-label="Подсказка">?</button>
+      <span style="display:none;position:absolute;left:0;top:calc(100% + 5px);z-index:200;width:230px;background:#3a2415;color:#f5e6c8;font-size:.8rem;padding:7px 10px;border:2px solid #8b5e3c;border-radius:4px;line-height:1.4;box-shadow:3px 3px 0 rgba(0,0,0,.5);pointer-events:none;">${text}</span>
+    </span>`
+  }
+
   function renderSettings() {
+    const { customButtons, showCqbForm } = state
     const mvHTML = MOVEMENT_PRESETS.map(p => {
       const active = params.movementWindowMinutes === p.value
       return `<div onclick="window._BF.updateMovement(${p.value})" style="flex:1;text-align:center;padding:5px 8px;background:${active?'#e8a020':'rgba(92,51,25,.1)'};border:2px solid #8b5e3c;border-radius:4px;color:${active?'#3d1f00':'#7a5235'};font-size:.95rem;cursor:pointer;">${p.label}</div>`
@@ -365,25 +412,83 @@ function render() {
       const rpuSlider = Math.max(1, Math.min(10, Math.round((params.rabbitsPerUnit[type] - 0.3) / 1.7 * 9 + 1)))
       return `<div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
         <div style="font-size:1rem;color:#5c3319;margin-bottom:5px;">${meta.emoji} ${meta.label}</div>
-        <div style="font-size:.85rem;color:#7a5235;margin-bottom:3px;">Доверие к сигналу</div>
+        <div style="display:flex;align-items:center;margin-bottom:3px;">
+          <span style="font-size:.85rem;color:#7a5235;">Доверие к сигналу</span>
+          ${tip('Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу.')}
+        </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
           <input type="range" min="1" max="10" step="1" value="${relSlider}" oninput="document.getElementById('rel_${type}').textContent=this.value" onchange="window._BF.updateReliability('${type}',this.value)" style="flex:1;" />
           <span id="rel_${type}" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">${relSlider}</span>
         </div>
-        <div style="font-size:.85rem;color:#7a5235;margin-bottom:3px;">Кроликов за сигнал</div>
+        <div style="display:flex;align-items:center;margin-bottom:3px;">
+          <span style="font-size:.85rem;color:#7a5235;">Кроликов за сигнал</span>
+          ${tip('Множитель, а не прямое число. Итог меньше: доверие, заметность и схлопывание дублей уменьшают вклад.')}
+        </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="range" min="1" max="10" step="1" value="${rpuSlider}" oninput="document.getElementById('rpu_${type}').textContent=this.value" onchange="window._BF.updateRPU('${type}',this.value)" style="flex:1;" />
           <span id="rpu_${type}" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">${rpuSlider}</span>
         </div>
       </div>`
     }).join('')
+
+    const cqbListHTML = customButtons.length
+      ? customButtons.map(b => `
+          <span style="display:inline-flex;align-items:center;gap:5px;background:#d4b896;border:2px solid #8b5e3c;padding:4px 10px;border-radius:4px;font-size:.9rem;color:#3d1f00;">
+            <span onclick="window._BF.fireCustomButton('${b.id}')" style="cursor:pointer;">${EVENT_META[b.event]?.emoji||'?'} ${b.label}</span>
+            <button onclick="window._BF.deleteCustomButton('${b.id}')" style="background:none;border:none;color:#7a2000;cursor:pointer;font-size:.8rem;padding:0 2px;" title="Удалить">✕</button>
+          </span>`).join('')
+      : `<span style="font-size:.85rem;color:#7a5235;">Пока нет кнопок — добавьте ниже</span>`
+
+    const cqbFormHTML = showCqbForm ? `
+      <div style="margin-top:8px;background:rgba(0,0,0,.05);border:1px solid #c4a06c;border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Название
+            <input id="cqb-label" type="text" placeholder="напр. Следы в сарае" maxlength="30" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
+            <select id="cqb-event" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+              ${EVENT_TYPES.map(t=>`<option value="${t}">${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Зона
+            <select id="cqb-location" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+              ${LOCATIONS.map(l=>`<option value="${l}">${l}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Кол-во
+            <input id="cqb-count" type="number" value="1" min="1" max="99" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Сила (1-10)
+          <input id="cqb-int" type="number" value="5" min="1" max="10" style="width:80px;padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+        </label>
+        <div style="display:flex;gap:8px;">
+          <div onclick="window._BF.saveCustomButton()" style="background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:4px 14px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:.9rem;">✓ Добавить кнопку</div>
+          <div onclick="window._BF.toggleCqbForm()" style="border:1px solid #8b5e3c;color:#7a5235;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.9rem;">Отмена</div>
+        </div>
+      </div>` : `<div onclick="window._BF.toggleCqbForm()" style="margin-top:8px;display:inline-block;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:3px 12px;border-radius:4px;cursor:pointer;font-size:.9rem;">+ Новая кнопка</div>`
+
     return `<div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:12px;">
+        <div style="display:flex;align-items:center;font-size:1rem;color:#5c3319;margin-bottom:8px;">
+          🚀 Быстрые кнопки
+          ${tip('Создайте кнопки для частых комбинаций. Нажатие добавляет событие с текущим временем и открывает карту.')}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">${cqbListHTML}</div>
+        ${cqbFormHTML}
+      </div>
       <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
-        <div style="font-size:1rem;color:#5c3319;margin-bottom:6px;">🏃 Скорость перемещения</div>
+        <div style="display:flex;align-items:center;font-size:1rem;color:#5c3319;margin-bottom:6px;">
+          🏃 Скорость перемещения
+          ${tip('Если два следа в разных местах появились близко по времени — возможно, один кролик. Чем быстрее — тем строже объединяем события.')}
+        </div>
         <div style="display:flex;gap:6px;">${mvHTML}</div>
       </div>
       <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
-        <div style="font-size:1rem;color:#5c3319;margin-bottom:6px;">⏱️ Как быстро выцветают следы</div>
+        <div style="display:flex;align-items:center;font-size:1rem;color:#5c3319;margin-bottom:6px;">
+          ⏱️ Как быстро выцветают следы
+          ${tip('Свежие следы значат больше старых. Быстро — старые почти не учитываются; медленно — вес падает не так резко.')}
+        </div>
         <div style="display:flex;gap:6px;">${frHTML}</div>
       </div>
       ${blocksHTML}
@@ -557,7 +662,14 @@ function render() {
       </div>
     </div>` : ''
 
-    const recs = buildFallbackRecs(rabbits, confidence, events, byZone)
+    const { llmRecs, llmLoading } = state
+    const recs = (Array.isArray(llmRecs) && llmRecs.length > 0) ? llmRecs : buildFallbackRecs(rabbits, confidence, events, byZone)
+    const isLlm = Array.isArray(llmRecs) && llmRecs.length > 0
+    const recsNote = llmLoading
+      ? `<div style="font-size:.8rem;color:#7a5235;margin-bottom:6px;">⏳ Запрашиваю AI-рекомендации…</div>`
+      : isLlm
+        ? `<div style="font-size:.8rem;color:#4caf50;margin-bottom:6px;">✨ Рекомендации от AI (claude-haiku)</div>`
+        : `<div style="font-size:.8rem;color:#7a5235;margin-bottom:6px;">ℹ️ Правила на основе данных — AI недоступен</div>`
     const recsHTML = recs.map(r => `<div style="display:flex;gap:8px;padding:8px 10px;background:rgba(232,160,32,.14);border:1px solid rgba(232,160,32,.4);border-radius:5px;font-size:.88rem;line-height:1.4;"><span style="color:#e8a020;">→</span><span>${r}</span></div>`).join('')
 
     return `<div style="position:fixed;inset:0;background:rgba(20,14,8,.55);z-index:100;display:flex;align-items:center;justify-content:center;">
@@ -580,7 +692,8 @@ function render() {
               <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:1.5rem;color:${confColor};">${confidence}%</div><div style="font-size:.78rem;color:#7a5235;">уверенность</div></div>
             </div>
             ${explanation?`<div style="font-size:.9rem;color:#3d1f00;line-height:1.5;margin-bottom:14px;font-style:italic;">${explanation}</div>`:''}
-            <div style="font-weight:bold;font-size:.95rem;color:#3d1f00;margin-bottom:6px;">Рекомендации</div>
+            <div style="font-weight:bold;font-size:.95rem;color:#3d1f00;margin-bottom:4px;">Рекомендации</div>
+            ${recsNote}
             <div style="display:flex;flex-direction:column;gap:8px;">${recsHTML}</div>
           </div>
         </div>
@@ -622,8 +735,19 @@ function render() {
 
 render()
 
-fetch('/api/advise', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ events: state.events, params: state.params }),
-}).catch(() => {})
+function fetchLlmRecs() {
+  setState({ llmLoading: true })
+  fetch('/api/advise', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ events: state.events, params: state.params }),
+  })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      const recs = data?.recommendations ?? data?.recs ?? null
+      setState({ llmRecs: Array.isArray(recs) ? recs : null, llmLoading: false })
+    })
+    .catch(() => setState({ llmLoading: false }))
+}
+
+fetchLlmRecs()
