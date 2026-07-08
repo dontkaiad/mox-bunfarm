@@ -1,472 +1,629 @@
-// Vanilla JS app shell — imports the production model, data & explainer
-import {
-  DEFAULT_PARAMS,
-  calculateRabbits,
-  calculateConfidence,
-  calculateByZone,
-  calculateContributions,
-  latestEventTime,
-  freshnessMultiplier,
-} from './model.js'
-import {
-  INITIAL_EVENTS,
-  EVENT_META,
-  EVENT_TYPES,
-  LOCATIONS,
-} from './data.js'
+import { DEFAULT_PARAMS, calculateRabbits, calculateConfidence, calculateByZone, calculateContributions, latestEventTime } from './model.js'
+import { INITIAL_EVENTS, EVENT_META, EVENT_TYPES, LOCATIONS } from './data.js'
 import { rabbitRange } from './rabbitRange.js'
 import { buildSubtitle } from './explainer.js'
 import { getConfidenceFactors } from './confidence.js'
 
-/* ═══════════════════════════════════════════════
-   STATIC DATA
-═══════════════════════════════════════════════ */
+// ── constants ──────────────────────────────────────────────────────────────
+const ZONE_ORDER = ['Огород', 'У забора', 'Сарай', 'Теплица']
 const ZONE_LAYOUT = {
-  'Огород':   { left:6.2,  top:4.5,  width:38.5, height:41.9 },
-  'У забора': { left:51.8, top:4.5,  width:45.0, height:41.9 },
-  'Сарай':    { left:3.2,  top:54.2, width:42.7, height:41.3 },
-  'Теплица':  { left:51.8, top:54.2, width:45.0, height:41.3 },
-}
-const ZONE_COLORS = {
-  'Огород':   'rgba(60,120,30,.18)',
-  'У забора': 'rgba(140,100,40,.18)',
-  'Сарай':    'rgba(80,60,40,.22)',
-  'Теплица':  'rgba(80,180,80,.16)',
+  'Огород':   { left: 6.2,  top: 4.5,  width: 38.5, height: 41.9 },
+  'У забора': { left: 51.8, top: 4.5,  width: 45.0, height: 41.9 },
+  'Сарай':    { left: 3.2,  top: 54.2, width: 42.7, height: 41.3 },
+  'Теплица':  { left: 51.8, top: 54.2, width: 45.0, height: 41.3 },
 }
 const MOVEMENT_PRESETS  = [{label:'медленно',value:60},{label:'средне',value:30},{label:'быстро',value:15}]
 const FRESHNESS_PRESETS = [{label:'быстро',value:60},{label:'средне',value:180},{label:'медленно',value:360}]
 const WORKLOG = [
-  { status:'done', title:'Анализ задания и архитектурные решения' },
-  { status:'done', title:'Модель расчёта (src/model.js)' },
-  { status:'done', title:'Юнит-тесты (vitest, 22 кейса)' },
-  { status:'done', title:'UI: тема Stardew Valley, иллюстрированная карта, попапы' },
-  { status:'todo', title:'FastAPI бэкенд + интеграция Anthropic API' },
-  { status:'todo', title:'Docker + docker-compose' },
-  { status:'todo', title:'README и итоговая документация' },
+  {status:'done', title:'Анализ задания и архитектурные решения'},
+  {status:'done', title:'Модель расчёта (src/model.js)'},
+  {status:'done', title:'Юнит-тесты (vitest, 22 кейса)'},
+  {status:'done', title:'UI: тема Stardew Valley, иллюстрированная карта, попапы'},
+  {status:'todo', title:'FastAPI бэкенд + интеграция Anthropic API'},
+  {status:'todo', title:'Docker + docker-compose'},
+  {status:'todo', title:'README и итоговая документация'},
 ]
 
-/* ═══════════════════════════════════════════════
-   STATE
-═══════════════════════════════════════════════ */
+const GARDEN_CROP_CYCLE = [
+  'assets/crop-leafy.png','assets/crop-potted.png','assets/sv-cauliflower.png',
+  'assets/crop-leafy.png','assets/sv-strawberry.png','assets/crop-potted.png',
+  'assets/sv-pumpkin.png','assets/crop-leafy.png','assets/crop-potted.png',
+]
+const gardenPlants = (() => {
+  const plants = []
+  const gCols = 8, gRows = 6
+  for (let r = 0; r < gRows - 1; r++) {
+    for (let c = 0; c < gCols; c++) {
+      const idx = r * gCols + c
+      const src = GARDEN_CROP_CYCLE[idx % GARDEN_CROP_CYCLE.length]
+      const big = src.includes('cauliflower') || src.includes('strawberry') || src.includes('pumpkin')
+      const jitter = ((idx * 53) % 7) - 3
+      plants.push({ src, left: 4 + c * (82 / (gCols - 1)) + jitter * 0.3, bottom: 4 + r * (90 / (gRows - 1)), width: big ? 9 : 6.5 })
+    }
+  }
+  return plants
+})()
+
+// ── helpers ────────────────────────────────────────────────────────────────
+function signalRole(pct) {
+  if (pct >= 35) return { text: 'главный сигнал', color: '#c84b0f' }
+  if (pct >= 15) return { text: 'заметный вклад', color: '#5c3319' }
+  if (pct >= 5)  return { text: 'влияет слабо',   color: '#7a5235' }
+  if (pct > 0)   return { text: 'почти не влияет', color: '#7a5235' }
+  return { text: 'дубль', color: '#a08060' }
+}
+
+function buildSignalNote(pct, rel, isCollapsed) {
+  const relNote = rel >= 0.7 ? 'доверие высокое' : rel >= 0.5 ? 'доверие среднее' : 'ненадёжный признак'
+  if (isCollapsed) return 'уже учтён более сильный сигнал поблизости'
+  if (pct >= 35) return `на нём держится бо́льшая часть оценки — ${relNote}`
+  if (pct >= 15) return `заметный вклад в итоговую цифру — ${relNote}`
+  if (pct >= 5)  return `влияет слабо — ${relNote}`
+  return `${relNote}, почти не меняет итог`
+}
+
+function buildFallbackRecs(rabbits, confidence, events, byZone) {
+  if (!events.length) return ['Нет данных. Установите датчики и запишите первые наблюдения.']
+  const recs = []
+  const topZone = Object.entries(byZone).sort((a, b) => b[1] - a[1])[0]
+  if (topZone && topZone[1] > 0.5) recs.push(`Зона «${topZone[0]}» — самая активная (~${topZone[1].toFixed(1)} кр.). Начните следующий обход отсюда.`)
+  if (events.some(e => e.event === 'motion_sensor')) recs.push('Датчик движения сработал — осмотрите сарай, пока следы свежие.')
+  if (rabbits > 5) recs.push(`Оценка крупная (~${Math.round(rabbits)} кр.). Установите датчики в зонах без сигналов.`)
+  if (confidence < 50) recs.push('Уверенность низкая. Добавьте сигналы из разных зон и разных типов.')
+  const fp = [...new Set(events.filter(e => e.event === 'footprints').map(e => e.location))]
+  if (fp.length > 1) recs.push(`Следы в нескольких зонах (${fp.join(', ')}) — проверьте переходы между участками.`)
+  if ((byZone['Теплица'] ?? 0) > 1) recs.push('Теплица: повышенная активность. Осмотрите периметр.')
+  return recs.slice(0, 4)
+}
+
+function heatColor(value, max) {
+  if (max < 0.001) return { color: 'hsl(120,28%,30%)', t: 0 }
+  const t = Math.min(value / max, 1)
+  const h = Math.round(118 - 98 * t), s = Math.round(28 + 57 * t), l = Math.round(30 + 14 * t)
+  return { color: `hsl(${h},${s}%,${l}%)`, t }
+}
+
+function BLANK_EVENT() { return { event: 'footprints', location: 'Огород', count: 1, intensity: 5, time: '12:00' } }
+
+// ── state ──────────────────────────────────────────────────────────────────
 let state = {
-  events:       INITIAL_EVENTS.map(e => ({...e})),
-  params:       { ...DEFAULT_PARAMS, rabbitsPerUnit:{...DEFAULT_PARAMS.rabbitsPerUnit}, reliability:{...DEFAULT_PARAMS.reliability} },
-  activeTab:    'map',
-  activeZone:   null,
-  showScore:    false,
-  showDiary:    false,
-  editingEvt:   null,
-  addingInZone: null,
-  nextId:       6,
-  llmText:      null,
+  events: [...INITIAL_EVENTS],
+  params: JSON.parse(JSON.stringify(DEFAULT_PARAMS)),
+  activeZone: null,
+  activeTab: 'map',
+  diaryOpen: false,
+  scoreOpen: false,
+  editingId: null,
+  editDrafts: {},
+  isAddingNew: false,
+  newDraft: null,
+  explainerOpen: false,
 }
 
 function setState(patch) {
-  state = {...state, ...patch}
+  const next = typeof patch === 'function' ? patch(state) : patch
+  state = { ...state, ...next }
   render()
 }
 
-/* ═══════════════════════════════════════════════
-   EVENT MANAGEMENT
-═══════════════════════════════════════════════ */
-function addEvent(data) {
-  const id = 'evt_' + String(state.nextId).padStart(3, '0')
-  setState({ events:[...state.events,{...data,id}], nextId:state.nextId+1, addingInZone:null })
-}
-function updateEvent(id, patch) {
-  setState({ events:state.events.map(e => e.id===id?{...e,...patch}:e), editingEvt:null })
-}
-function deleteEvent(id) {
-  setState({ events:state.events.filter(e => e.id!==id) })
-}
-// Expose to inline handlers
-window._BF = { addEvent, updateEvent, deleteEvent, setState, state: () => state }
-
-/* ═══════════════════════════════════════════════
-   DERIVED / HELPER
-═══════════════════════════════════════════════ */
-function confidenceClass(c) { return c>=70?'ch':c>=40?'cm':'cl' }
-function heatClass(v, max) { if(!max||v===0) return ''; const r=v/max; return r<.33?'heat-1':r<.67?'heat-2':'heat-3' }
-
-function buildFallbackRecs(rabbits, confidence, events, byZone) {
-  const recs = []
-  const sorted = Object.entries(byZone).sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0)
-  if (sorted.length) recs.push(`Расставьте ловушки в зоне «${sorted[0][0]}» — там наибольшая активность (~${sorted[0][1].toFixed(1)}).`)
-  const types = new Set(events.map(e=>e.event))
-  if (types.size < 3) recs.push('Добавьте больше типов наблюдений: разнообразие сигналов повышает точность.')
-  if (confidence < 50) recs.push('Уверенность низкая — добавьте свежие события или проверьте настройки модели.')
-  if (rabbits > 5) recs.push('Высокая активность. Рекомендуем усилить мониторинг по всей ферме.')
-  if (!recs.length) recs.push('Продолжайте сбор данных для уточнения оценки.')
-  return recs
-}
-
-function generateAiText(rabbits, conf, byZone, recs) {
-  if (!state.events.length) return '<p>Дневник пуст. Начните записывать наблюдения на карте фермы.</p>'
-  const cw = conf>=70?'высокой':conf>=40?'средней':'низкой'
-  const ccls = conf>=70?'fok':conf>=40?'fwarn':'fbad'
-  const top = Object.entries(byZone).sort((a,b)=>b[1]-a[1]).find(([,v])=>v>0)
-  const rng = rabbitRange(rabbits)
-  return `<p>На основе <strong>${state.events.length} событий</strong> система оценивает численность кроликов в <strong>${rng==='0'?'0':rng+'&nbsp;кролика(ов)'}</strong>.</p>
-<p>Уверенность: <strong class="${ccls}">${conf}% (${cw})</strong>${top?`. Наибольшая активность в «${top[0]}»`:''}.
-</p>
-<p><strong>Рекомендации:</strong></p>
-${recs.map(r=>`<p>• ${r}</p>`).join('')}
-${state.llmText ? `<div class="divider"></div><p><strong>AI-анализ (сервер):</strong></p><p>${state.llmText}</p>` : ''}
-<p style="margin-top:10px;font-size:14px;color:#7a5235"><em>⚠ Для AI-вывода подключите бэкенд Anthropic API (FastAPI, в разработке).</em></p>`
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER: HEADER
-═══════════════════════════════════════════════ */
-function renderHeader(rabbits, conf, byZone) {
-  const sub = buildSubtitle(rabbits, byZone, state.events, state.params, EVENT_META)
-  return `<div class="header">
-  <div class="header-left">
-    <div class="title">🐇 Невидимая Кроличья Ферма</div>
-    <div class="subtitle">${sub}</div>
-    <div class="explanation">Оценка популяции по косвенным признакам · AI-first dev test task</div>
-  </div>
-  <div class="header-right">
-    <div class="tabs">
-      ${[['map','🗺 Карта'],['settings','⚙ Параметры'],['worklog','📓 Журнал']].map(([t,l])=>
-        `<button class="tab${state.activeTab===t?' active':''}" onclick="_BF.setState({activeTab:'${t}',activeZone:null,editingEvt:null,addingInZone:null})">${l}</button>`
-      ).join('')}
-    </div>
-    <button class="btn" onclick="_BF.setState({showScore:true})">🐇 ${Math.round(rabbits)}</button>
-    <button class="btn btn-ghost" onclick="_BF.setState({showDiary:true})">📖 Дневник</button>
-  </div>
-</div>`
+// ── global handlers ────────────────────────────────────────────────────────
+window._BF = {
+  setTab(id) { setState({ activeTab: id, activeZone: null }) },
+  handleZoneClick(zone) { setState(s => ({ activeZone: s.activeZone === zone ? null : zone })) },
+  closeZonePopup() { setState({ activeZone: null }) },
+  openDiary() { setState({ diaryOpen: true }) },
+  closeDiary() { setState({ diaryOpen: false, editingId: null, isAddingNew: false }) },
+  openDiaryAdd() {
+    const draft = BLANK_EVENT()
+    if (state.activeZone) draft.location = state.activeZone
+    setState({ diaryOpen: true, activeZone: null, isAddingNew: true, newDraft: draft })
+  },
+  openScorePopup() { setState({ scoreOpen: true }) },
+  closeScorePopup() { setState({ scoreOpen: false }) },
+  toggleExplainer() { setState(s => ({ explainerOpen: !s.explainerOpen })) },
+  startEdit(id) {
+    const evt = state.events.find(e => e.id === id)
+    setState(s => ({ editingId: s.editingId === id ? null : id, editDrafts: { ...s.editDrafts, [id]: { ...evt } } }))
+  },
+  updateDraftField(id, field, value) {
+    setState(s => ({ editDrafts: { ...s.editDrafts, [id]: { ...s.editDrafts[id], [field]: value } } }))
+  },
+  updateDraftCount(id, value) {
+    setState(s => ({ editDrafts: { ...s.editDrafts, [id]: { ...s.editDrafts[id], count: Math.max(1, +value || 1) } } }))
+  },
+  updateDraftIntensity(id, value) {
+    setState(s => ({ editDrafts: { ...s.editDrafts, [id]: { ...s.editDrafts[id], intensity: +value } } }))
+  },
+  saveEdit(id) {
+    const draft = state.editDrafts[id]
+    setState(s => ({ events: s.events.map(e => e.id === id ? { ...e, ...draft } : e), editingId: null }))
+  },
+  cancelEdit() { setState({ editingId: null }) },
+  deleteEvent(id) { setState(s => ({ events: s.events.filter(e => e.id !== id), editingId: null })) },
+  startAddEvent() { setState({ isAddingNew: true, newDraft: BLANK_EVENT() }) },
+  cancelNewEvent() { setState({ isAddingNew: false, newDraft: null }) },
+  updateNewDraft(field, value) { setState(s => ({ newDraft: { ...s.newDraft, [field]: value } })) },
+  updateNewCount(value) { setState(s => ({ newDraft: { ...s.newDraft, count: Math.max(1, +value || 1) } })) },
+  updateNewIntensity(value) { setState(s => ({ newDraft: { ...s.newDraft, intensity: +value } })) },
+  saveNewEvent() {
+    const d = state.newDraft
+    setState(s => ({ events: [...s.events, { ...d, id: 'evt_' + Date.now() }], isAddingNew: false, newDraft: null }))
+  },
+  updateMovement(value) { setState(s => ({ params: { ...s.params, movementWindowMinutes: +value } })) },
+  updateFreshness(value) { setState(s => ({ params: { ...s.params, freshnessWindowMinutes: +value } })) },
+  updateReliability(type, value) {
+    setState(s => ({ params: { ...s.params, reliability: { ...s.params.reliability, [type]: +value / 10 } } }))
+  },
+  updateRPU(type, value) {
+    setState(s => ({ params: { ...s.params, rabbitsPerUnit: { ...s.params.rabbitsPerUnit, [type]: 0.3 + (+value - 1) / 9 * 1.7 } } }))
+  },
 }
 
-/* ═══════════════════════════════════════════════
-   RENDER: MAP TAB
-═══════════════════════════════════════════════ */
-function renderMapTab(byZone) {
-  const maxZ = Math.max(...Object.values(byZone), 0.01)
+// ── render ─────────────────────────────────────────────────────────────────
+function render() {
+  const { events, params, activeZone, activeTab, diaryOpen, scoreOpen, editingId, editDrafts, isAddingNew, newDraft, explainerOpen } = state
 
-  const zonesHtml = LOCATIONS.map(loc => {
-    const z    = ZONE_LAYOUT[loc]
-    const cnt  = byZone[loc] ?? 0
-    const evts = state.events.filter(e => e.location===loc)
-    const hc   = heatClass(cnt, maxZ)
-    return `<div class="zone" style="left:${z.left}%;top:${z.top}%;width:${z.width}%;height:${z.height}%;background:${ZONE_COLORS[loc]};${state.activeZone===loc?'outline:2px solid #e8a020;':''}"
-      onclick="_BF.setState({activeZone:_BF.state().activeZone==='${loc}'?null:'${loc}',editingEvt:null,addingInZone:null})">
-      <span class="zone-label">${loc}${evts.length?` (${evts.length})`:''}</span>
-      ${cnt>0?`<span class="zone-badge ${hc}">~${cnt.toFixed(1)}</span>`:''}
-    </div>`
+  const rabbits = calculateRabbits(events, params)
+  const confidence = calculateConfidence(events, params, EVENT_TYPES.length)
+  const contributions = calculateContributions(events, params)
+  const byZone = calculateByZone(events, params)
+  const explanation = buildSubtitle(rabbits, byZone, events, params, EVENT_META)
+  const confColor = confidence >= 70 ? '#7fff7f' : confidence >= 40 ? '#ffe066' : '#ff9966'
+  const rabbitsDisplay = rabbitRange(rabbits)
+
+  const tabsHTML = ['map','settings','worklog'].map((id, i) => {
+    const labels = ['Карта', 'Настройка модели', 'AI Worklog']
+    const active = activeTab === id
+    return `<div onclick="window._BF.setTab('${id}')" style="width:170px;text-align:center;padding:10px 12px;font-weight:700;font-size:14px;color:${active?'#3a2415':'#f0dcae'};background:${active?'#f0dcae':'rgba(0,0,0,.16)'};border:${active?'2px solid #e0a83c':'2px solid rgba(240,220,174,.35)'};box-shadow:${active?'0 -2px 0 #e0a83c inset':'none'};border-radius:6px 6px 0 0;white-space:nowrap;cursor:pointer;flex-shrink:0;box-sizing:border-box;">${labels[i]}</div>`
   }).join('')
 
-  const sprites = [
-    { src:'sv-well.png',       l:46.5, t:44, w:7 },
-    { src:'sv-bush-a.png',     l:2,    t:46, w:6 },
-    { src:'sv-bush-b.png',     l:91,   t:11, w:6 },
-    { src:'sv-bush-a.png',     l:88,   t:46, w:5 },
-    { src:'sv-cauliflower.png',l:12,   t:14, w:5 },
-    { src:'sv-strawberry.png', l:25,   t:27, w:5 },
-    { src:'crop-leafy.png',    l:59,   t:62, w:5 },
-    { src:'crop-potted.png',   l:75,   t:72, w:5 },
-    { src:'sv-cabin.png',      l:8,    t:62, w:8 },
-    { src:'sv-grass-b.png',    l:38,   t:20, w:4 },
-    { src:'sv-grass-a.png',    l:70,   t:30, w:4 },
-  ].map(s=>`<img class="sprite" src="/assets/${s.src}" style="left:${s.l}%;top:${s.t}%;width:${s.w}%" onerror="this.style.display='none'">`).join('')
+  const evtCount = {}, lastTime = {}
+  for (const e of events) {
+    evtCount[e.location] = (evtCount[e.location] ?? 0) + 1
+    if (!lastTime[e.location] || e.time > lastTime[e.location]) lastTime[e.location] = e.time
+  }
+  const maxEst = Math.max(...Object.values(byZone), 0.001)
 
-  const popup = state.activeZone ? renderZonePopup(state.activeZone, byZone) : ''
+  function renderMap() {
+    const zonesHTML = ZONE_ORDER.map(id => {
+      const layout = ZONE_LAYOUT[id]
+      const heat = heatColor(byZone[id] ?? 0, maxEst)
+      const count = evtCount[id] ?? 0
+      const paws = Array.from({ length: Math.min(count, 5) }, (_, i) => ({
+        left: 12 + (i * 16) % 70, top: 62 + ((i * 23) % 22), rot: (i * 37) % 60 - 30
+      }))
+      const glowSize = 65 + heat.t * 20
+      const glowGrad = `radial-gradient(circle,hsla(${Math.round(40-20*heat.t)},90%,65%,${(0.12+heat.t*0.45).toFixed(2)}),transparent 70%)`
 
-  return `<div>
-  <div class="map-wrap">
-    <div class="map-inner">
-      <div class="map-bg"></div>
-      <div class="map-path map-path-h"></div>
-      <div class="map-path map-path-v"></div>
-      ${sprites}
-      ${zonesHtml}
-      ${popup}
-    </div>
-  </div>
-  <div style="margin-top:8px;font-size:15px;color:#5c3319;text-align:center">Кликните на зону для просмотра и редактирования событий</div>
-</div>`
-}
+      const fr5 = `<img class="pix" src="assets/sv-fence-run.png" style="height:100%;width:20%;object-fit:cover;object-position:bottom left;margin-right:-2px;" />`.repeat(4)
+        + `<img class="pix" src="assets/sv-fence-run.png" style="height:100%;width:20%;object-fit:cover;object-position:bottom left;" />`
 
-/* ═══════════════════════════════════════════════
-   RENDER: ZONE POPUP
-═══════════════════════════════════════════════ */
-function renderZonePopup(loc, byZone) {
-  const z    = ZONE_LAYOUT[loc]
-  const evts = state.events.filter(e => e.location===loc)
-  const cnt  = byZone[loc] ?? 0
+      let decor = ''
+      if (id === 'Сарай') {
+        decor = `<div style="position:absolute;left:36%;top:76%;width:22%;height:16%;background:#8a5a34;border-radius:3px;pointer-events:none;"></div>
+          <img class="pix" src="assets/sv-cabin.png" style="position:absolute;left:36%;top:0%;width:48%;transform:translate(-50%,0);filter:drop-shadow(3px 5px 3px rgba(0,0,0,.4));pointer-events:none;" />
+          <img class="pix" src="assets/sv-coop.png" style="position:absolute;right:4%;top:30%;width:32%;filter:drop-shadow(3px 4px 3px rgba(0,0,0,.4));pointer-events:none;" />`
+      } else if (id === 'Теплица') {
+        decor = `<img class="pix" src="assets/sv-greenhouse.png" style="position:absolute;left:50%;top:6%;width:58%;height:78%;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(3px 5px 3px rgba(0,0,0,.35));pointer-events:none;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;right:-8%;top:-2%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;right:-8%;top:18%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;right:-8%;top:38%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;right:-8%;top:58%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;right:-8%;top:78%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;right:-8%;top:98%;width:18%;pointer-events:none;z-index:2;" />`
+      } else if (id === 'Огород') {
+        const plantsHTML = gardenPlants.map(gp =>
+          `<img class="pix" src="${gp.src}" style="position:absolute;left:${gp.left.toFixed(1)}%;bottom:${gp.bottom.toFixed(1)}%;width:${gp.width}%;pointer-events:none;" />`
+        ).join('')
+        decor = `<div style="position:absolute;left:-10%;top:20%;width:113%;height:14%;pointer-events:none;display:flex;align-items:flex-end;z-index:2;">${fr5}</div>
+          <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-6%;top:-16%;width:17%;pointer-events:none;z-index:1;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:5%;top:-18%;width:15%;pointer-events:none;z-index:1;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:16%;top:-15%;width:13%;pointer-events:none;z-index:1;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-fence-post.png" style="position:absolute;left:0.5%;top:32%;height:16%;pointer-events:none;z-index:1;" />
+          <img class="pix" src="assets/sv-fence-post.png" style="position:absolute;right:0.5%;top:32%;height:16%;pointer-events:none;z-index:1;" />
+          <img class="pix" src="assets/sv-fence-post.png" style="position:absolute;left:0.5%;top:74%;height:16%;pointer-events:none;z-index:1;" />
+          <img class="pix" src="assets/sv-fence-post.png" style="position:absolute;right:0.5%;top:74%;height:16%;pointer-events:none;z-index:1;" />
+          <div style="position:absolute;left:8%;top:36%;width:84%;height:58%;background:#6b4423;border-radius:6px;box-shadow:inset 0 0 0 3px #4a2c14;background-image:repeating-linear-gradient(180deg,rgba(0,0,0,.08) 0px,rgba(0,0,0,.08) 3px,transparent 3px,transparent 11px);pointer-events:none;">${plantsHTML}</div>`
+      } else if (id === 'У забора') {
+        decor = `<div style="position:absolute;left:0.2%;top:20%;width:108%;height:14%;pointer-events:none;display:flex;align-items:flex-end;z-index:1;">${fr5}</div>
+          <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;right:-10%;top:-18%;width:16%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:2%;top:-19%;width:14%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;right:11%;top:-16%;width:13%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:19%;top:-19%;width:14%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;right:5%;top:-8%;width:12%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:16%;top:-7%;width:12%;pointer-events:none;z-index:0;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;left:6%;top:31%;width:14%;pointer-events:none;z-index:3;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;left:20%;top:32%;width:14%;pointer-events:none;z-index:3;" />
+          <img class="pix" src="assets/sv-well.png" style="position:absolute;left:40%;top:32%;width:18%;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));pointer-events:none;z-index:3;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;left:62%;top:32%;width:14%;pointer-events:none;z-index:3;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;left:76%;top:33%;width:14%;pointer-events:none;z-index:3;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;right:-8%;top:28%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-b.png" style="position:absolute;right:-8%;top:48%;width:18%;pointer-events:none;z-index:2;" />
+          <img class="pix" src="assets/sv-bush-a.png" style="position:absolute;right:-8%;top:68%;width:18%;pointer-events:none;z-index:2;" />`
+      }
 
-  // Keep popup on-screen
-  const pl = z.left + z.width + 1 > 93 ? z.left - 43 : z.left + z.width + 1
-  const pt = Math.min(z.top, 52)
+      const ZONE_EMOJI = { 'Огород':'🥕','У забора':'🕳️','Сарай':'📡','Теплица':'🐾' }
+      const isActive = activeZone === id
+      const pawsHTML = paws.map(p =>
+        `<span style="position:absolute;left:${p.left}%;top:${p.top}%;font-size:13px;opacity:.85;transform:rotate(${p.rot}deg);pointer-events:none;filter:drop-shadow(0 1px 0 rgba(0,0,0,.4));">🐾</span>`
+      ).join('')
 
-  const evtsHtml = evts.length
-    ? evts.map(e => {
-        if (state.editingEvt === e.id) return editForm(e)
-        const m = EVENT_META[e.event] ?? { emoji:'?', label:e.event }
-        return `<div class="zone-evt">
-          <span style="font-size:18px;flex-shrink:0">${m.emoji}</span>
-          <span class="zone-evt-info">${m.label}<br>
-            <span style="color:#7a5235;font-size:13px">${e.count}&nbsp;шт · сила&nbsp;${e.intensity} · ${e.time}</span>
-          </span>
-          <span class="zone-evt-actions">
-            <button class="btn btn-sm" onclick="_BF.setState({editingEvt:'${e.id}'})">✏</button>
-            <button class="btn btn-sm btn-red" onclick="_BF.deleteEvent('${e.id}')">✕</button>
-          </span>
+      return `<div onclick="window._BF.handleZoneClick('${id}')" style="position:absolute;left:${layout.left}%;top:${layout.top}%;width:${layout.width}%;height:${layout.height}%;border-radius:8px;cursor:pointer;border:2px solid transparent;background:transparent;overflow:visible;z-index:6;">
+        <div style="position:absolute;left:20%;top:15%;width:${glowSize}%;height:${glowSize}%;border-radius:50%;background:${glowGrad};filter:blur(3px);mix-blend-mode:screen;pointer-events:none;"></div>
+        ${decor}${pawsHTML}
+        <div style="position:absolute;left:8px;top:6px;background:#3a2415;color:#f0dcae;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid #e0a83c;white-space:nowrap;z-index:3;">${id}</div>
+        ${count>0?`<div style="position:absolute;right:8px;top:8px;width:26px;height:26px;border-radius:50%;background:#e8a020;border:2px solid #5c3319;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:bold;color:#3d1f00;">${count}</div>`:''}
+        ${isActive?`<div style="position:absolute;inset:-3px;border-radius:10px;border:2px solid rgba(245,230,200,.7);pointer-events:none;"></div>`:''}
+      </div>`
+    }).join('')
+
+    let popupHTML = ''
+    if (activeZone) {
+      const zoneEvents = events.filter(e => e.location === activeZone)
+      const pctMap = Object.fromEntries(contributions.map(c => [c.id, c.percent]))
+      const layout = ZONE_LAYOUT[activeZone]
+      const zoneHeat = heatColor(byZone[activeZone] ?? 0, maxEst)
+      const ZONE_EMOJI = { 'Огород':'🥕','У забора':'🕳️','Сарай':'📡','Теплица':'🐾' }
+      const count = zoneEvents.length
+      const activityText = count===0?'нет данных':zoneHeat.t>=0.66?'активность высокая':zoneHeat.t>=0.33?'активность средняя':'активность низкая'
+      const popupLeft = layout.left < 30 ? 53 : 4
+
+      const evListHTML = zoneEvents.map(e => {
+        const meta = EVENT_META[e.event], pct = pctMap[e.id]??0
+        return `<div style="background:rgba(255,248,225,.55);border:1px solid #c9a35f;border-radius:4px;padding:8px 10px;display:flex;gap:8px;align-items:center;font-size:12.5px;color:#4a3520;">
+          <span>${meta.emoji}</span><span style="flex:1;">${meta.label}</span>
+          <span style="color:#7a5235;font-size:.82rem;">${e.time}</span>
+          <span style="color:${pct>=20?'#c84b0f':'#7a5235'};font-size:.82rem;min-width:32px;text-align:right;">${pct>0?pct+'%':'—'}</span>
         </div>`
       }).join('')
-    : '<div style="font-size:15px;color:#7a5235;padding:4px 0">Событий нет</div>'
 
-  const addHtml = state.addingInZone === loc
-    ? addForm(loc)
-    : `<button class="btn btn-sm" style="margin-top:6px" onclick="_BF.setState({addingInZone:'${loc}'})">+ Добавить событие</button>`
+      popupHTML = `<div style="position:absolute;left:${popupLeft}%;top:6%;width:42%;max-width:420px;background:#f0dcae;border:5px solid #7a4a2a;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.45);z-index:40;animation:popIn .15s ease-out;">
+        <div style="background:linear-gradient(#3f5c3a,#2e4429);padding:10px 14px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <div style="color:#f0dcae;font-weight:800;font-size:15px;white-space:nowrap;">${ZONE_EMOJI[activeZone]??'📍'} ${activeZone}</div>
+          <div style="color:#e0a83c;font-weight:700;font-size:12px;white-space:nowrap;flex:1;">${activityText}</div>
+          <div onclick="window._BF.closeZonePopup()" style="width:22px;height:22px;flex-shrink:0;background:#c94b3f;border:2px solid #6b241c;border-radius:5px;color:#fff;font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</div>
+        </div>
+        <div style="padding:14px 16px;color:#3a2415;font-size:13px;line-height:1.5;">
+          <div style="display:flex;gap:10px;margin-bottom:10px;">
+            <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:8px;"><div style="font-weight:800;font-size:18px;">${count}</div><div style="font-size:11px;opacity:.75;">сигналов</div></div>
+            <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:8px;"><div style="font-weight:800;font-size:18px;">${lastTime[activeZone]??'—'}</div><div style="font-size:11px;opacity:.75;">последний след</div></div>
+            <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:8px;"><div style="font-weight:800;font-size:18px;">${rabbitRange(byZone[activeZone]??0)} 🐰</div><div style="font-size:11px;opacity:.75;">в этой зоне</div></div>
+          </div>
+          ${count===0?'<div style="color:#7a5235;font-size:13px;padding:4px 0 8px;">Нет зарегистрированных сигналов</div>':''}
+          ${count>0?`<div style="font-weight:700;margin-bottom:6px;">Последние следы</div><div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;">${evListHTML}</div>`:''}
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <div onclick="window._BF.openDiaryAdd()" style="background:linear-gradient(#a97a4a,#7a4a2a);border:2px solid #4a2c14;color:#f0dcae;font-weight:700;border-radius:5px;padding:6px 14px;font-size:12px;box-shadow:0 2px 0 #2b1c10;cursor:pointer;">Добавить наблюдение</div>
+          </div>
+        </div>
+      </div>`
+    }
 
-  return `<div class="zone-popup" style="left:${pl}%;top:${pt}%;right:auto;bottom:auto">
-  <div class="zpop-title">
-    <span>${loc}${cnt>0?` (~${cnt.toFixed(1)} 🐇)`:''}</span>
-    <button class="zpop-close" onclick="_BF.setState({activeZone:null,editingEvt:null,addingInZone:null})">✕</button>
-  </div>
-  ${evtsHtml}
-  <div class="divider"></div>
-  ${addHtml}
-</div>`
-}
+    const terrain = `<div style="position:absolute;inset:0;background:linear-gradient(160deg,#6fae4a 0%,#5c9b3e 35%,#4f8a3c 65%,#3f7530 100%);"></div>
+      <div style="position:absolute;inset:0;background-image:url('assets/sv-grass-a.png');background-repeat:repeat;background-size:34px 44px;background-position:6px 4px;opacity:.28;image-rendering:pixelated;"></div>
+      <div style="position:absolute;inset:0;background-image:url('assets/sv-grass-b.png');background-repeat:repeat;background-size:29px 38px;background-position:20px 22px;opacity:.22;image-rendering:pixelated;"></div>
+      <div style="position:absolute;left:0;top:46.6%;width:100%;height:7.4%;background-image:url('assets/sv-divider-swatch.png');background-repeat:repeat;background-size:30px 30px;image-rendering:pixelated;box-shadow:inset 0 0 10px rgba(0,0,0,.35),0 0 0 2px rgba(58,40,20,.5);z-index:1;"></div>
+      <div style="position:absolute;left:45.5%;top:0;width:6.4%;height:100%;background-color:#8f877a;background-image:url('assets/sv-path-stone.png');background-repeat:repeat;background-size:34px 34px;image-rendering:pixelated;box-shadow:inset 0 0 10px rgba(0,0,0,.35),2px 0 0 rgba(58,40,20,.55),-2px 0 0 rgba(58,40,20,.55);clip-path:polygon(18% 0%,82% 0%,100% 4%,88% 9%,100% 14%,84% 19%,96% 24%,80% 29%,100% 34%,86% 39%,98% 44%,82% 49%,100% 54%,84% 59%,96% 64%,80% 69%,100% 74%,86% 79%,98% 84%,82% 89%,100% 94%,82% 100%,18% 100%,0% 96%,16% 91%,2% 86%,20% 81%,4% 76%,18% 71%,0% 66%,16% 61%,2% 56%,20% 51%,0% 46%,18% 41%,4% 36%,16% 31%,0% 26%,20% 21%,2% 16%,18% 11%,0% 6%);z-index:2;"></div>
+      <img class="pix" src="assets/sv-pebble-b.png" style="position:absolute;left:9%;top:47.5%;width:1.9%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-d.png" style="position:absolute;left:29%;top:48.4%;width:2%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-a.png" style="position:absolute;left:52%;top:47.3%;width:1.8%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-c.png" style="position:absolute;left:80%;top:48.4%;width:2%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-d.png" style="position:absolute;left:93%;top:47.4%;width:1.9%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-a.png" style="position:absolute;left:47.5%;top:6%;width:2.4%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-b.png" style="position:absolute;left:47.9%;top:16%;width:2.2%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-c.png" style="position:absolute;left:47.4%;top:28%;width:2.6%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-d.png" style="position:absolute;left:47.8%;top:38%;width:2.4%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-a.png" style="position:absolute;left:47.4%;top:63%;width:2.4%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-b.png" style="position:absolute;left:47.9%;top:73%;width:2.2%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-c.png" style="position:absolute;left:47.5%;top:88%;width:2.4%;pointer-events:none;z-index:2;" />
+      <img class="pix" src="assets/sv-pebble-c.png" style="position:absolute;left:8%;top:47.6%;width:2%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-a.png" style="position:absolute;left:22%;top:48.2%;width:1.8%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-d.png" style="position:absolute;left:35%;top:47.4%;width:2%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-b.png" style="position:absolute;left:60%;top:48%;width:1.9%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-c.png" style="position:absolute;left:73%;top:47.5%;width:2.1%;pointer-events:none;z-index:1;" />
+      <img class="pix" src="assets/sv-pebble-a.png" style="position:absolute;left:87%;top:48.3%;width:1.8%;pointer-events:none;z-index:1;" />`
 
-function editForm(e) {
-  const opts = EVENT_TYPES.map(t => `<option value="${t}" ${t===e.event?'selected':''}>${EVENT_META[t]?.emoji} ${EVENT_META[t]?.label}</option>`).join('')
-  return `<div class="evt-form">
-    <label>Тип</label><select id="ed-type">${opts}</select>
-    <div class="row">
-      <div><label>Кол-во</label><input type="number" id="ed-count" value="${e.count}" min="1" max="99"></div>
-      <div><label>Сила</label><input type="number" id="ed-int" value="${e.intensity}" min="1" max="10"></div>
-      <div><label>Время</label><input type="time" id="ed-time" value="${e.time}"></div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-sm btn-red" onclick="_BF.setState({editingEvt:null})">Отмена</button>
-      <button class="btn btn-sm" onclick="_BF.updateEvent('${e.id}',{event:document.getElementById('ed-type').value,count:+document.getElementById('ed-count').value||1,intensity:+document.getElementById('ed-int').value||5,time:document.getElementById('ed-time').value||'00:00'})">Сохранить</button>
-    </div>
-  </div>`
-}
+    const borderTrees = `<img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-6%;top:-10%;width:9%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-8%;top:-4%;width:9%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-9%;top:6%;width:8%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-6.5%;top:13%;width:8.5%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-3.5%;top:23%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-3%;top:44%;width:10%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-5%;top:60%;width:8%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-1.5%;top:67%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-3%;top:82%;width:12.5%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;right:-3%;top:-13%;width:9%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:11%;top:-12%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-1.5%;bottom:-11%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:-2%;bottom:-12%;width:13%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:8;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;right:9%;bottom:-5%;width:12%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:8;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;right:20%;bottom:-16%;width:13%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:8;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:36%;bottom:-19%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:2;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-9%;top:-12%;width:13%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:9;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-2%;top:-14%;width:12%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:9;" />
+      <img class="pix" src="assets/sv-tree-a.png" style="position:absolute;left:-11%;top:-2%;width:11%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:9;" />
+      <img class="pix" src="assets/sv-tree-b.png" style="position:absolute;left:-8%;top:8%;width:12%;pointer-events:none;filter:drop-shadow(2px 3px 2px rgba(0,0,0,.35));z-index:9;" />`
 
-function addForm(loc) {
-  const opts = EVENT_TYPES.map(t => `<option value="${t}">${EVENT_META[t]?.emoji} ${EVENT_META[t]?.label}</option>`).join('')
-  const now  = new Date().toTimeString().slice(0,5)
-  return `<div class="evt-form">
-    <label>Тип</label><select id="ad-type">${opts}</select>
-    <div class="row">
-      <div><label>Кол-во</label><input type="number" id="ad-count" value="1" min="1" max="99"></div>
-      <div><label>Сила</label><input type="number" id="ad-int" value="5" min="1" max="10"></div>
-      <div><label>Время</label><input type="time" id="ad-time" value="${now}"></div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-sm btn-red" onclick="_BF.setState({addingInZone:null})">Отмена</button>
-      <button class="btn btn-sm" onclick="_BF.addEvent({event:document.getElementById('ad-type').value,location:'${loc}',count:+document.getElementById('ad-count').value||1,intensity:+document.getElementById('ad-int').value||5,time:document.getElementById('ad-time').value||'00:00'})">Добавить</button>
-    </div>
-  </div>`
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER: SETTINGS TAB
-═══════════════════════════════════════════════ */
-function renderSettingsTab() {
-  const p = state.params
-  const mP = MOVEMENT_PRESETS.find(x=>x.value===p.movementWindowMinutes)
-  const fP = FRESHNESS_PRESETS.find(x=>x.value===p.freshnessWindowMinutes)
-
-  const mkSlider = (group, t, min, max, step, isRel) => {
-    const m    = EVENT_META[t]
-    const val  = p[group][t]
-    const disp = isRel ? Math.round(val*100)+'%' : val.toFixed(1)
-    const upd  = isRel
-      ? `(function(){const v=+this.value;_BF.setState({params:{..._BF.state().params,${group}:{..._BF.state().params.${group},'${t}':v}}});document.getElementById('sv-${group}-${t}').textContent=Math.round(v*100)+'%'})()`
-      : `(function(){const v=+this.value;_BF.setState({params:{..._BF.state().params,${group}:{..._BF.state().params.${group},'${t}':v}}});document.getElementById('sv-${group}-${t}').textContent=v.toFixed(1)})()`
-    return `<div class="slider-row">
-      <span class="slider-label">${m?.emoji} ${m?.label}</span>
-      <input type="range" min="${min}" max="${max}" step="${step}" value="${val}" oninput="${upd.replace(/"/g,"'")}">
-      <span class="slider-val" id="sv-${group}-${t}">${disp}</span>
+    return `<div style="position:relative;width:100%;aspect-ratio:440/300;border-radius:10px;overflow:hidden;border:6px solid #6a4326;box-shadow:0 6px 0 rgba(0,0,0,.35),inset 0 0 0 2px #4a2c14;">
+      ${terrain}${zonesHTML}
+      <div style="position:absolute;left:0;bottom:4px;width:100%;text-align:center;font-size:.78rem;color:#f5ffe0;text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:50;">нажмите на зону для подробностей</div>
+      ${borderTrees}${popupHTML}
     </div>`
   }
 
-  return `<div class="parchment">
-  <div class="settings-section">
-    <h3>🐾 Скорость перемещения кроликов</h3>
-    <p class="settings-note">Временное окно группировки событий (мин)</p>
-    <div class="preset-row">
-      ${MOVEMENT_PRESETS.map(pr=>`<button class="preset-btn${mP?.value===pr.value?' active':''}"
-        onclick="_BF.setState({params:{..._BF.state().params,movementWindowMinutes:${pr.value}}})">${pr.label} (${pr.value}&nbsp;мин)</button>`).join('')}
-    </div>
-  </div>
-  <div class="settings-section">
-    <h3>⏱ Скорость устаревания следов</h3>
-    <p class="settings-note">Время полного устаревания сигнала (мин)</p>
-    <div class="preset-row">
-      ${FRESHNESS_PRESETS.map(pr=>`<button class="preset-btn${fP?.value===pr.value?' active':''}"
-        onclick="_BF.setState({params:{..._BF.state().params,freshnessWindowMinutes:${pr.value}}})">${pr.label} (${pr.value}&nbsp;мин)</button>`).join('')}
-    </div>
-  </div>
-  <div class="settings-section">
-    <h3>📊 Кроликов на единицу сигнала</h3>
-    ${EVENT_TYPES.map(t=>mkSlider('rabbitsPerUnit',t,0.1,3,0.1,false)).join('')}
-  </div>
-  <div class="settings-section">
-    <h3>✅ Надёжность типа сигнала</h3>
-    ${EVENT_TYPES.map(t=>mkSlider('reliability',t,0.1,1,0.05,true)).join('')}
-  </div>
-  <div style="margin-top:10px">
-    <button class="btn btn-red btn-sm" onclick="_BF.setState({params:{rabbitsPerUnit:{...${JSON.stringify(DEFAULT_PARAMS.rabbitsPerUnit)}},reliability:{...${JSON.stringify(DEFAULT_PARAMS.reliability)}},movementWindowMinutes:${DEFAULT_PARAMS.movementWindowMinutes},freshnessWindowMinutes:${DEFAULT_PARAMS.freshnessWindowMinutes}}})">Сбросить к умолчаниям</button>
-  </div>
-</div>`
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER: WORKLOG TAB
-═══════════════════════════════════════════════ */
-function renderWorklogTab() {
-  const done = WORKLOG.filter(w=>w.status==='done').length
-  return `<div class="parchment">
-  <div class="diary-page-title" style="margin-bottom:12px">
-    📓 Журнал работ — ${done}/${WORKLOG.length} выполнено
-  </div>
-  ${WORKLOG.map(w=>`<div class="worklog-item">
-    <span class="${w.status==='done'?'s-done':'s-todo'}" style="font-size:20px">${w.status==='done'?'✅':'⬜'}</span>
-    <span style="${w.status==='done'?'text-decoration:line-through;color:#7a7a5a':''}">${w.title}</span>
-  </div>`).join('')}
-  <div style="margin-top:16px;font-size:16px;color:#7a5235">Выполнено: ${done} · Осталось: ${WORKLOG.length-done}</div>
-</div>`
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER: SCORE POPUP
-═══════════════════════════════════════════════ */
-function renderScorePopup(rabbits, conf, byZone) {
-  const contribs = calculateContributions(state.events, state.params)
-  const factors  = getConfidenceFactors(state.events, state.params)
-  const rng      = rabbitRange(rabbits)
-  const cc       = confidenceClass(conf)
-  const recs     = buildFallbackRecs(rabbits, conf, state.events, byZone)
-
-  const factorRows = Object.entries(factors).map(([k, v]) => {
-    const label = {diversity:'Разнообразие сигналов',avgIntensity:'Средняя интенсивность',consistency:'Согласованность зон'}[k] ?? k
-    const pct   = Math.round(v*100)
-    const cls   = pct>=66?'fok':pct>=33?'fwarn':'fbad'
-    return `<div class="score-row"><span class="score-row-label">${label}</span><span class="score-row-val ${cls}">${pct}%</span></div>`
-  }).join('')
-
-  return `<div class="overlay" onclick="if(event.target.classList.contains('overlay'))_BF.setState({showScore:false})">
-  <div class="score-modal" onclick="event.stopPropagation()">
-    <div class="score-title">🐇 Оценка популяции</div>
-    <span class="rabbit-num">${Math.round(rabbits)}</span>
-    <div class="rabbit-range-txt">${rng === '0' ? '0 кроликов' : rng + ' кроликов'}</div>
-    <div class="conf-bar-bg"><div class="conf-bar-fill ${cc}" style="width:${conf}%"></div></div>
-    <div class="conf-lbl ${cc}">Уверенность: ${conf}%</div>
-    <div class="divider"></div>
-    <div class="score-section">
-      <h4>По зонам</h4>
-      ${LOCATIONS.map(loc=>{const v=byZone[loc]??0;return v>0?`<div class="score-row"><span class="score-row-label">${loc}</span><span class="score-row-val">~${v.toFixed(1)}</span></div>`:''}).join('')||'<div style="color:#7a5235;font-size:16px">Нет данных</div>'}
-    </div>
-    ${contribs.length?`<div class="score-section">
-      <h4>Вклад сигналов</h4>
-      ${[...contribs].sort((a,b)=>(b.percent??0)-(a.percent??0)).map(e=>{
-        const m=EVENT_META[e.event]??{emoji:'?',label:e.event}
-        return `<div class="score-row">
-          <span class="score-row-label">${m.emoji} ${m.label} · ${e.event!==e.location?'': ''}${state.events.find(ev=>ev.id===e.id)?.location??''} · ${state.events.find(ev=>ev.id===e.id)?.time??''}</span>
-          <span class="score-row-val">${e.percent??0}%</span>
-        </div>`
-      }).join('')}
-    </div>`:''}
-    ${factorRows?`<div class="score-section"><h4>Факторы уверенности</h4>${factorRows}</div>`:''}
-    ${recs.length?`<div class="score-section">
-      <h4>Рекомендации</h4>
-      ${recs.map(r=>`<div style="font-size:16px;color:#3d1f00;padding:3px 0;border-bottom:1px solid #c4a06c">• ${r}</div>`).join('')}
-    </div>`:''}
-    <div style="text-align:right;margin-top:12px">
-      <button class="btn btn-red btn-sm" onclick="_BF.setState({showScore:false})">Закрыть</button>
-    </div>
-  </div>
-</div>`
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER: DIARY MODAL
-═══════════════════════════════════════════════ */
-function renderDiaryModal(rabbits, conf, byZone) {
-  const sorted = [...state.events].sort((a,b)=>a.time.localeCompare(b.time))
-  const recs   = buildFallbackRecs(rabbits, conf, state.events, byZone)
-  const ai     = generateAiText(rabbits, conf, byZone, recs)
-
-  return `<div class="overlay" onclick="if(event.target.classList.contains('overlay'))_BF.setState({showDiary:false})">
-  <div class="diary-modal" onclick="event.stopPropagation()">
-    <div class="diary-page">
-      <div class="diary-page-title">
-        📔 Полевой дневник
-        <button class="zpop-close" onclick="_BF.setState({showDiary:false})">✕</button>
+  function renderSettings() {
+    const mvHTML = MOVEMENT_PRESETS.map(p => {
+      const active = params.movementWindowMinutes === p.value
+      return `<div onclick="window._BF.updateMovement(${p.value})" style="flex:1;text-align:center;padding:5px 8px;background:${active?'#e8a020':'rgba(92,51,25,.1)'};border:2px solid #8b5e3c;border-radius:4px;color:${active?'#3d1f00':'#7a5235'};font-size:.95rem;cursor:pointer;">${p.label}</div>`
+    }).join('')
+    const frHTML = FRESHNESS_PRESETS.map(p => {
+      const active = params.freshnessWindowMinutes === p.value
+      return `<div onclick="window._BF.updateFreshness(${p.value})" style="flex:1;text-align:center;padding:5px 8px;background:${active?'#e8a020':'rgba(92,51,25,.1)'};border:2px solid #8b5e3c;border-radius:4px;color:${active?'#3d1f00':'#7a5235'};font-size:.95rem;cursor:pointer;">${p.label}</div>`
+    }).join('')
+    const blocksHTML = EVENT_TYPES.map(type => {
+      const meta = EVENT_META[type]
+      const relSlider = Math.round(params.reliability[type] * 10)
+      const rpuSlider = Math.max(1, Math.min(10, Math.round((params.rabbitsPerUnit[type] - 0.3) / 1.7 * 9 + 1)))
+      return `<div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
+        <div style="font-size:1rem;color:#5c3319;margin-bottom:5px;">${meta.emoji} ${meta.label}</div>
+        <div style="font-size:.85rem;color:#7a5235;margin-bottom:3px;">Доверие к сигналу</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <input type="range" min="1" max="10" step="1" value="${relSlider}" oninput="document.getElementById('rel_${type}').textContent=this.value" onchange="window._BF.updateReliability('${type}',this.value)" style="flex:1;" />
+          <span id="rel_${type}" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">${relSlider}</span>
+        </div>
+        <div style="font-size:.85rem;color:#7a5235;margin-bottom:3px;">Кроликов за сигнал</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="range" min="1" max="10" step="1" value="${rpuSlider}" oninput="document.getElementById('rpu_${type}').textContent=this.value" onchange="window._BF.updateRPU('${type}',this.value)" style="flex:1;" />
+          <span id="rpu_${type}" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">${rpuSlider}</span>
+        </div>
+      </div>`
+    }).join('')
+    return `<div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
+        <div style="font-size:1rem;color:#5c3319;margin-bottom:6px;">🏃 Скорость перемещения</div>
+        <div style="display:flex;gap:6px;">${mvHTML}</div>
       </div>
-      ${sorted.length ? sorted.map(e=>{
-        const m=EVENT_META[e.event]??{emoji:'?',label:e.event}
-        return `<div class="diary-entry">
-          <span class="diary-entry-time">${e.time} · ${e.location}</span>
-          ${m.emoji} ${m.label} — ${e.count}&nbsp;шт., сила&nbsp;${e.intensity}/10
-        </div>`
-      }).join('') : '<div style="color:#7a5235;font-size:16px">Событий не записано</div>'}
-    </div>
-    <div class="diary-page">
-      <div class="diary-page-title">🤖 Анализ</div>
-      <div class="diary-ai">${ai}</div>
-    </div>
-  </div>
-</div>`
-}
-
-/* ═══════════════════════════════════════════════
-   MAIN RENDER
-═══════════════════════════════════════════════ */
-function render() {
-  const rabbits = calculateRabbits(state.events, state.params)
-  const conf    = calculateConfidence(state.events, state.params, EVENT_TYPES.length)
-  const byZone  = calculateByZone(state.events, state.params)
-
-  let html = renderHeader(rabbits, conf, byZone)
-  html += '<div class="main">'
-
-  if (state.activeTab === 'map') {
-    html += renderMapTab(byZone)
-  } else if (state.activeTab === 'settings') {
-    html += renderSettingsTab()
-  } else if (state.activeTab === 'worklog') {
-    html += renderWorklogTab()
+      <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
+        <div style="font-size:1rem;color:#5c3319;margin-bottom:6px;">⏱️ Как быстро выцветают следы</div>
+        <div style="display:flex;gap:6px;">${frHTML}</div>
+      </div>
+      ${blocksHTML}
+    </div>`
   }
 
-  html += '</div>'
+  function renderWorklog() {
+    return `<div style="display:flex;flex-direction:column;gap:10px;">
+      <div style="font-size:1.15rem;color:#5c3319;border-bottom:2px solid #8b5e3c;padding-bottom:6px;">🤖 AI Worklog</div>
+      <div style="font-size:.88rem;color:#7a5235;">История решений и чекпоинты разработки — не путать с дневником наблюдений фермера (📖 кнопка в шапке)</div>
+      ${WORKLOG.map(w => `<div style="display:flex;gap:12px;padding:9px 10px;border-left:3px solid ${w.status==='done'?'#4caf50':'rgba(139,94,60,.3)'};border-bottom:1px solid rgba(139,94,60,.2);">
+        <span style="font-size:1.1rem;flex-shrink:0;">${w.status==='done'?'✅':'⬜'}</span>
+        <div style="font-size:.98rem;color:${w.status==='done'?'#3d1f00':'#7a5235'};">${w.title}</div>
+      </div>`).join('')}
+    </div>`
+  }
 
-  if (state.showScore) html += renderScorePopup(rabbits, conf, byZone)
-  if (state.showDiary) html += renderDiaryModal(rabbits, conf, byZone)
+  function renderScorePopup() {
+    const totalVal = contributions.reduce((s, c) => s + c.value, 0)
+    const evtMap = Object.fromEntries(events.map(e => [e.id, e]))
+    const ranked = [...contributions].sort((a, b) => b.value - a.value).map(c => {
+      const evt = evtMap[c.id]; if (!evt) return null
+      const meta = EVENT_META[evt.event]
+      const isCollapsed = c.percent === 0
+      const pct = isCollapsed ? 0 : Math.round((c.value / (totalVal || 1)) * 100)
+      const role = signalRole(pct)
+      const rel = params.reliability[evt.event] ?? 0.5
+      return { emoji: meta.emoji, label: meta.label, location: evt.location, roleText: role.text, roleColor: role.color,
+        pct, isCollapsed, note: buildSignalNote(pct, rel, isCollapsed), opacity: isCollapsed ? 0.5 : 1 }
+    }).filter(Boolean)
 
-  document.getElementById('root').innerHTML = html
+    const signalsHTML = ranked.map(s => `<div style="padding:8px 0;border-bottom:1px dashed rgba(139,94,60,.2);opacity:${s.opacity};">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+        <span style="font-size:15px;">${s.emoji}</span>
+        <span style="flex:1;">${s.label} <span style="color:#7a5235;font-size:12px;">(${s.location})</span></span>
+        <span style="font-size:11px;padding:1px 9px;border-radius:10px;border:1px solid ${s.roleColor};color:${s.roleColor};white-space:nowrap;">${s.roleText}</span>
+      </div>
+      ${!s.isCollapsed?`<div style="display:flex;align-items:center;gap:8px;padding-left:28px;"><div style="width:90px;height:8px;background:rgba(139,94,60,.15);border:1px solid rgba(139,94,60,.2);border-radius:3px;overflow:hidden;flex-shrink:0;"><div style="height:100%;background:${s.roleColor};width:${s.pct}%;"></div></div><span style="font-size:11px;color:#7a5235;font-style:italic;">${s.note}</span></div>`:
+      `<div style="padding-left:28px;font-size:11px;color:#7a5235;font-style:italic;">${s.note}</div>`}
+    </div>`).join('')
 
-  // Keep _BF.state() reference fresh (closures don't update)
-  window._BF.state = () => state
-}
+    const factors = getConfidenceFactors(events, params)
+    const uniqueTypes = new Set(events.map(e => e.event)).size
+    const factorDefs = [
+      { label:'Разнообразие сигналов', value:factors.diversity,
+        con: p => p>=65?`${uniqueTypes} типа(ов) — хорошее разнообразие`:p>=35?`${uniqueTypes} типа(ов) — неплохо, но можно больше`:`всего ${uniqueTypes} тип(а) — мало разнообразия` },
+      { label:'Сила следов', value:factors.avgIntensity,
+        con: p => p>=65?'следы чёткие и выраженные':p>=35?'следы умеренной силы':'следы слабые — возможно, всё почудилось' },
+      { label:'Согласованность по зонам', value:factors.consistency,
+        con: p => p>=65?'видно, что кроликов несколько':p>=35?'нейтральная картина':'возможно, один кролик перебегает' },
+    ]
+    const factorsHTML = factorDefs.map(f => {
+      const pct = Math.round(f.value*100), color = pct>=65?'#4caf50':pct>=35?'#e8a020':'#c84b0f'
+      return `<div style="padding:6px 0;border-bottom:1px dashed rgba(139,94,60,.15);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+          <span>${f.label}</span><span style="font-size:12px;color:${color};">${pct>=65?'высокий':pct>=35?'средний':'низкий'}</span>
+        </div>
+        <div style="height:9px;background:rgba(139,94,60,.2);border:1px solid rgba(139,94,60,.25);border-radius:3px;overflow:hidden;margin-bottom:4px;"><div style="height:100%;background:${color};width:${pct}%;"></div></div>
+        <div style="font-size:11px;color:#7a5235;font-style:italic;line-height:1.3;">${f.con(pct)}</div>
+      </div>`
+    }).join('')
 
-/* ═══════════════════════════════════════════════
-   LLM polling (fire-and-forget, non-blocking)
-═══════════════════════════════════════════════ */
-function tryFetchAdvise() {
-  const { events, params } = state
-  if (!events.length) return
-  const rabbits     = calculateRabbits(events, params)
-  const confidence  = calculateConfidence(events, params, EVENT_TYPES.length)
-  const byZone      = calculateByZone(events, params)
-  const contribs    = calculateContributions(events, params)
-  fetch('/api/advise', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rabbits, confidence, events, contributions:contribs, byZone, params }),
-    signal: AbortSignal.timeout(15000),
-  })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => { if (data?.text) setState({ llmText: data.text }) })
-    .catch(() => {})
+    const explContent = explainerOpen ? `<div style="padding:10px 16px 14px;background:rgba(245,230,200,.4);display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.5;">
+      <div><strong style="color:#5c3319;">3 шага расчёта:</strong> 1) каждый след → кролики (сколько × курс × доверие × заметность × свежесть); 2) схлопываем дубли рядом по месту и времени; 3) складываем остаток с поправкой на перемещение между зонами.</div>
+      <div style="background:rgba(139,94,60,.08);border-left:3px solid rgba(139,94,60,.4);padding:6px 10px;border-radius:0 4px 4px 0;"><strong style="color:#5c3319;">Уверенность — не оценка.</strong> Она показывает, насколько цифре можно верить: разнообразие сигналов, сила следов, согласованность по зонам.</div>
+    </div>` : ''
+
+    return `<div style="position:fixed;inset:0;background:rgba(20,14,8,.5);z-index:90;display:flex;align-items:flex-start;justify-content:flex-end;padding:90px 30px 30px;">
+      <div style="width:min(760px,92vw);max-height:82vh;overflow-y:auto;background:#f0dcae;border:5px solid #7a4a2a;border-radius:10px;box-shadow:0 20px 45px rgba(0,0,0,.5);animation:popIn .15s ease-out;">
+        <div style="background:linear-gradient(#3f5c3a,#2e4429);padding:12px 16px;border-radius:6px 6px 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px;position:sticky;top:0;">
+          <div style="color:#f0dcae;font-weight:800;font-size:16px;white-space:nowrap;">🔍 Разбор оценки — ≈ ${rabbitsDisplay} кроликов</div>
+          <div onclick="window._BF.closeScorePopup()" style="width:24px;height:24px;flex-shrink:0;background:#c84b0f;border:2px solid #6b241c;border-radius:5px;color:#fff;font-size:13px;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</div>
+        </div>
+        <div style="padding:16px 18px 20px;color:#3a2415;font-size:13px;">
+          <div style="border-bottom:1px solid rgba(139,94,60,.3);margin-bottom:12px;">
+            <div onclick="window._BF.toggleExplainer()" style="padding:9px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;color:#5c3319;cursor:pointer;background:rgba(92,51,25,.06);">
+              <span>ℹ️ Как устроена оценка</span><span>${explainerOpen?'▲':'▼'}</span>
+            </div>
+            ${explContent}
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0;">
+            <div style="flex:1 1 320px;padding:6px 16px 12px;border-right:1px dashed rgba(139,94,60,.3);">
+              <div style="font-size:14px;color:#5c3319;border-bottom:1px solid rgba(139,94,60,.3);padding-bottom:5px;margin-bottom:16px;">Вклад каждого сигнала</div>
+              ${signalsHTML}
+            </div>
+            <div style="flex:1 1 320px;padding:6px 16px 12px;">
+              <div style="font-size:14px;color:#5c3319;border-bottom:1px solid rgba(139,94,60,.3);padding-bottom:5px;margin-bottom:10px;">Из чего складывается уверенность ${confidence}%</div>
+              ${factorsHTML}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`
+  }
+
+  function renderDiary() {
+    const pctMapAll = Object.fromEntries(contributions.map(c => [c.id, c.percent]))
+    const eventsHTML = events.map(e => {
+      const meta = EVENT_META[e.event], pct = pctMapAll[e.id]??0
+      const isEditing = editingId === e.id, draft = editDrafts[e.id] ?? e
+      const editForm = isEditing ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-top:none;border-radius:0 0 5px 5px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
+            <select onchange="window._BF.updateDraftField('${e.id}','event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+              ${EVENT_TYPES.map(t=>`<option value="${t}"${draft.event===t?' selected':''}>${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
+            <select onchange="window._BF.updateDraftField('${e.id}','location',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+              ${LOCATIONS.map(l=>`<option value="${l}"${draft.location===l?' selected':''}>${l}</option>`).join('')}
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Время
+            <input type="time" value="${draft.time}" onchange="window._BF.updateDraftField('${e.id}','time',this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Сколько раз
+            <input type="number" min="1" max="20" value="${draft.count}" onchange="window._BF.updateDraftCount('${e.id}',this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Заметность (1–10)
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="range" min="1" max="10" step="1" value="${draft.intensity}" oninput="this.nextElementSibling.textContent=this.value" onchange="window._BF.updateDraftIntensity('${e.id}',this.value)" style="flex:1;" />
+            <span style="min-width:18px;text-align:right;color:#3d1f00;font-weight:bold;">${draft.intensity}</span>
+          </div>
+        </label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div onclick="window._BF.saveEdit('${e.id}')" style="background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:4px 14px;border-radius:4px;font-weight:bold;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.3);">✓ Сохранить</div>
+          <div onclick="window._BF.cancelEdit()" style="border:1px solid #8b5e3c;color:#7a5235;padding:4px 10px;border-radius:4px;cursor:pointer;">Отмена</div>
+          <div onclick="window._BF.deleteEvent('${e.id}')" style="margin-left:auto;background:#c84b0f;border:2px solid #8b2500;color:#fff;padding:3px 10px;border-radius:4px;cursor:pointer;">Удалить</div>
+        </div>
+      </div>` : ''
+      return `<div style="margin-bottom:8px;">
+        <div onclick="window._BF.startEdit('${e.id}')" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.42);border:1px solid #c9a35f;border-radius:5px;padding:7px 10px;cursor:pointer;font-size:.92rem;">
+          <span style="font-size:1.1rem;">${meta.emoji}</span>
+          <span style="flex:1;">${meta.label} <span style="color:#7a5235;">· ${e.location}</span></span>
+          <span style="color:#7a5235;font-size:.82rem;">${e.time}</span>
+          <span style="color:#7a5235;font-size:.82rem;">×${e.count}</span>
+          <span style="color:${pct>=20?'#c84b0f':'#7a5235'};font-size:.82rem;min-width:32px;text-align:right;">${pct>0?pct+'%':'—'}</span>
+        </div>${editForm}
+      </div>`
+    }).join('')
+
+    const addForm = (isAddingNew && newDraft) ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
+          <select onchange="window._BF.updateNewDraft('event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            ${EVENT_TYPES.map(t=>`<option value="${t}"${newDraft.event===t?' selected':''}>${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
+          <select onchange="window._BF.updateNewDraft('location',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            ${LOCATIONS.map(l=>`<option value="${l}"${newDraft.location===l?' selected':''}>${l}</option>`).join('')}
+          </select>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Время
+          <input type="time" value="${newDraft.time}" onchange="window._BF.updateNewDraft('time',this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Сколько раз
+          <input type="number" min="1" max="20" value="${newDraft.count}" onchange="window._BF.updateNewCount(this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+        </label>
+      </div>
+      <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Заметность (1–10)
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="range" min="1" max="10" step="1" value="${newDraft.intensity}" oninput="this.nextElementSibling.textContent=this.value" onchange="window._BF.updateNewIntensity(this.value)" style="flex:1;" />
+          <span style="min-width:18px;text-align:right;color:#3d1f00;font-weight:bold;">${newDraft.intensity}</span>
+        </div>
+      </label>
+      <div style="display:flex;gap:8px;">
+        <div onclick="window._BF.saveNewEvent()" style="background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:4px 14px;border-radius:4px;font-weight:bold;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.3);">✓ Добавить</div>
+        <div onclick="window._BF.cancelNewEvent()" style="border:1px solid #8b5e3c;color:#7a5235;padding:4px 10px;border-radius:4px;cursor:pointer;">Отмена</div>
+      </div>
+    </div>` : ''
+
+    const recs = buildFallbackRecs(rabbits, confidence, events, byZone)
+    const recsHTML = recs.map(r => `<div style="display:flex;gap:8px;padding:8px 10px;background:rgba(232,160,32,.14);border:1px solid rgba(232,160,32,.4);border-radius:5px;font-size:.88rem;line-height:1.4;"><span style="color:#e8a020;">→</span><span>${r}</span></div>`).join('')
+
+    return `<div style="position:fixed;inset:0;background:rgba(20,14,8,.55);z-index:100;display:flex;align-items:center;justify-content:center;">
+      <div style="position:relative;width:min(1140px,94vw);height:min(720px,90vh);animation:bookIn .18s ease-out;">
+        <div style="position:absolute;inset:-16px;background:#7a4a2a;border-radius:16px;border:4px solid #3d1f00;z-index:-1;box-shadow:0 26px 60px rgba(0,0,0,.55);"></div>
+        <div style="display:flex;width:100%;height:100%;border-radius:10px;overflow:hidden;">
+          <div style="flex:1.15;background:linear-gradient(180deg,#f5e6c8,#ead5b0);padding:22px 24px;overflow-y:auto;box-shadow:inset -10px 0 24px rgba(0,0,0,.12);">
+            <div style="font-size:1.3rem;color:#3d1f00;margin-bottom:2px;">Дневник фермера</div>
+            <div style="font-size:.85rem;color:#7a5235;margin-bottom:14px;">Журнал сигналов о кроликах (${events.length})</div>
+            ${eventsHTML}${addForm}
+            ${!isAddingNew?`<div onclick="window._BF.startAddEvent()" style="margin-top:10px;display:inline-block;background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:6px 16px;border-radius:4px;font-weight:bold;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.3);">+ Добавить наблюдение</div>`:''}
+          </div>
+          <div style="width:2px;background:linear-gradient(rgba(0,0,0,.15),rgba(0,0,0,0),rgba(0,0,0,.15));flex-shrink:0;"></div>
+          <div style="flex:1;background:linear-gradient(180deg,#f5e6c8,#ead5b0);padding:22px 24px;overflow-y:auto;position:relative;box-shadow:inset 10px 0 24px rgba(0,0,0,.12);">
+            <div onclick="window._BF.closeDiary()" style="position:absolute;top:16px;right:16px;width:28px;height:28px;background:#c84b0f;border:2px solid #8b2500;border-radius:6px;color:#fff;font-size:.95rem;font-weight:900;display:flex;align-items:center;justify-content:center;cursor:pointer;">✕</div>
+            <div style="font-size:1.3rem;color:#3d1f00;margin-bottom:2px;">🧙 Заключение</div>
+            <div style="font-size:.85rem;color:#7a5235;margin-bottom:14px;">Оценка на основе журнала наблюдений</div>
+            <div style="display:flex;gap:10px;margin-bottom:14px;">
+              <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:1.5rem;color:#5c3319;">${rabbitsDisplay} 🐰</div><div style="font-size:.78rem;color:#7a5235;">оценка</div></div>
+              <div style="flex:1;background:rgba(122,74,42,.12);border-radius:6px;padding:10px;text-align:center;"><div style="font-size:1.5rem;color:${confColor};">${confidence}%</div><div style="font-size:.78rem;color:#7a5235;">уверенность</div></div>
+            </div>
+            ${explanation?`<div style="font-size:.9rem;color:#3d1f00;line-height:1.5;margin-bottom:14px;font-style:italic;">${explanation}</div>`:''}
+            <div style="font-weight:bold;font-size:.95rem;color:#3d1f00;margin-bottom:6px;">Рекомендации</div>
+            <div style="display:flex;flex-direction:column;gap:8px;">${recsHTML}</div>
+          </div>
+        </div>
+      </div>
+    </div>`
+  }
+
+  document.getElementById('root').innerHTML = `<div style="min-height:100vh;background:radial-gradient(circle at 20% 10%,rgba(255,255,255,.04),transparent 40%),#1e4d2b;padding:16px;display:flex;flex-direction:column;gap:0;color:#3d1f00;font-size:20px;">
+    <div style="background:linear-gradient(#3f5c3a,#2e4429);border:4px solid #1f2f1c;border-radius:8px 8px 0 0;box-shadow:5px 5px 0 rgba(0,0,0,.5);display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 18px;flex-wrap:wrap;">
+      <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <div style="color:#f9e9bc;font-family:'Almendra',serif;font-weight:700;font-size:22px;letter-spacing:.3px;white-space:nowrap;text-shadow:2px 2px 0 rgba(0,0,0,.55),0 0 14px rgba(232,160,32,.25);">Ферма невидимых кроликов</div>
+          <div style="color:rgba(255,255,255,.75);font-size:10px;letter-spacing:.3px;white-space:nowrap;">Тестовое задание AI-first Developer · MOX · Карина Ларк</div>
+        </div>
+        ${explanation?`<div style="display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border:1px solid rgba(240,220,174,.2);border-radius:6px;padding:6px 12px;color:rgba(245,230,200,.85);font-size:.85rem;line-height:1.4;"><span style="font-size:14px;flex-shrink:0;">📜</span><span>${explanation}</span></div>`:''}
+        <div style="display:flex;gap:6px;overflow-x:auto;">${tabsHTML}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;margin-left:auto;">
+        <div onclick="window._BF.openScorePopup()" style="width:200px;height:48px;display:flex;align-items:center;justify-content:center;gap:10px;background:#2b1c10;border:2px solid #1a1008;border-radius:8px;padding:0 14px;cursor:pointer;box-sizing:border-box;" title="Разбор оценки">
+          <span style="font-size:18px;">🥕</span>
+          <div style="color:#f0dcae;font-size:12px;line-height:1.2;white-space:nowrap;">
+            <div style="font-weight:800;font-size:15px;">≈ ${rabbitsDisplay} кроликов</div>
+            <div style="opacity:.8;">уверенность ${confidence}%</div>
+          </div>
+        </div>
+        <div onclick="window._BF.openDiary()" style="width:200px;height:48px;display:flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(#a97a4a,#7a4a2a);border:2px solid #4a2c14;border-radius:8px;padding:0 14px;box-shadow:0 2px 0 #2b1c10;cursor:pointer;box-sizing:border-box;">
+          <span style="font-size:17px;">📖</span>
+          <span style="color:#f0dcae;font-weight:800;font-size:13px;white-space:nowrap;">Дневник фермера</span>
+        </div>
+      </div>
+    </div>
+    ${scoreOpen ? renderScorePopup() : ''}
+    <div style="margin-top:14px;background:linear-gradient(180deg,#f5e6c8 0%,#ead5b0 100%);border:3px solid #8b5e3c;border-radius:0 6px 6px 6px;box-shadow:4px 4px 0 rgba(0,0,0,.35);padding:18px;min-height:600px;position:relative;">
+      ${activeTab==='map'?renderMap():activeTab==='settings'?renderSettings():renderWorklog()}
+    </div>
+    ${diaryOpen ? renderDiary() : ''}
+  </div>`
 }
 
 render()
-// Try to get AI text on load (silently fails if backend is down)
-setTimeout(tryFetchAdvise, 500)
+
+fetch('/api/advise', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ events: state.events, params: state.params }),
+}).catch(() => {})
