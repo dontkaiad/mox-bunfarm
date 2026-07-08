@@ -314,7 +314,7 @@ function render() {
   const contributions = calculateContributions(events, params)
   const byZone = calculateByZone(events, params)
   const explanation = buildSubtitle(rabbits, byZone, events, params, EVENT_META)
-  const confColor = confidence >= 70 ? '#7fff7f' : confidence >= 40 ? '#ffe066' : '#ff9966'
+  const confColor = confidence >= 70 ? '#4caf50' : confidence >= 40 ? '#e8a020' : '#c84b0f'
   const rabbitsDisplay = rabbitRange(rabbits)
 
   const tabsHTML = ['map','settings','worklog'].map((id, i) => {
@@ -566,12 +566,12 @@ function render() {
             <input id="cqb-label" type="text" placeholder="напр. Следы в сарае" maxlength="30" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-            <select id="cqb-event" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            <select id="cqb-event" class="bf-select">
               ${allEventTypes.map(t=>`<option value="${t}">${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Зона
-            <select id="cqb-location" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            <select id="cqb-location" class="bf-select">
               ${LOCATIONS.map(l=>`<option value="${l}">${l}</option>`).join('')}
             </select>
           </label>
@@ -819,12 +819,12 @@ function render() {
       const editForm = isEditing ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-top:none;border-radius:0 0 5px 5px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-            <select onchange="window._BF.updateDraftField('${e.id}','event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            <select onchange="window._BF.updateDraftField('${e.id}','event',this.value)" class="bf-select">
               ${allEventTypes.map(t=>`<option value="${t}"${draft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
-            <select onchange="window._BF.updateDraftField('${e.id}','location',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+            <select onchange="window._BF.updateDraftField('${e.id}','location',this.value)" class="bf-select">
               ${LOCATIONS.map(l=>`<option value="${l}"${draft.location===l?' selected':''}>${l}</option>`).join('')}
             </select>
           </label>
@@ -861,12 +861,12 @@ function render() {
     const addForm = (isAddingNew && newDraft) ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:6px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-          <select onchange="window._BF.updateNewDraft('event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+          <select onchange="window._BF.updateNewDraft('event',this.value)" class="bf-select">
             ${allEventTypes.map(t=>`<option value="${t}"${newDraft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
-          <select onchange="window._BF.updateNewDraft('location',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
+          <select onchange="window._BF.updateNewDraft('location',this.value)" class="bf-select">
             ${LOCATIONS.map(l=>`<option value="${l}"${newDraft.location===l?' selected':''}>${l}</option>`).join('')}
           </select>
         </label>
@@ -960,7 +960,7 @@ function render() {
       </div>
     </div>
     ${scoreOpen ? renderScorePopup() : ''}
-    <div style="margin-top:14px;background:linear-gradient(180deg,#f5e6c8 0%,#ead5b0 100%);border:3px solid #8b5e3c;border-radius:0 6px 6px 6px;box-shadow:4px 4px 0 rgba(0,0,0,.35);padding:18px;position:relative;">
+    <div style="margin-top:14px;background:linear-gradient(180deg,#f5e6c8 0%,#ead5b0 100%);border:3px solid #8b5e3c;border-radius:0 6px 6px 6px;box-shadow:4px 4px 0 rgba(0,0,0,.35);padding:18px;position:relative;${activeTab!=='map'?'max-height:calc(100vh - 220px);overflow-y:auto;':''}">
       ${activeTab==='map'?renderMap():activeTab==='settings'?renderSettings():renderWorklog()}
     </div>
     ${diaryOpen ? renderDiary() : ''}
