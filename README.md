@@ -1,53 +1,138 @@
-# 🐇 Mox BunFarm
+# 🐇 Ферма невидимых кроликов
 
-Estimates rabbit count in farm zones from sign observations — tracks, holes, sensors.
-Record what you spotted; the model collapses duplicates, adjusts for cross-zone movement,
-and gives a probability-weighted count with a confidence score.
+Веб-интерфейс для оценки численности кроликов на ферме по косвенным признакам — следам, ямкам, датчикам движения и другим наблюдениям.
 
-AI recommendations (Claude Haiku) fire automatically when events change.
+Фермер записывает, что заметил и где. Модель схлопывает дубли, учитывает свежесть следов и вероятность перемещения между зонами, выдаёт оценку с диапазоном и уверенностью. AI (Claude Haiku) даёт рекомендации, что проверить дальше.
 
-## Stack
+**Демо:** [bunfarm.heylark.dev](https://bunfarm.heylark.dev)
 
-- **Frontend**: React 19 + Vite — Stardew Valley aesthetic, Russian UI
-- **Backend**: FastAPI + Anthropic Claude Haiku
+---
 
-## Local dev
+## Стек
 
-**Frontend only** — the model runs in-browser; the API falls back gracefully when absent:
+| Слой | Технологии |
+|---|---|
+| Фронтенд | Vanilla JS + Vite, тема Stardew Valley, шрифт VT323 |
+| Бэкенд | FastAPI (Python), Anthropic SDK |
+| AI | Claude Haiku — рекомендации по журналу наблюдений |
+| Деплой | Docker Compose, Caddy, Vultr, GitHub Actions |
+| Тесты | Vitest — 43 юнит-теста модели расчёта |
 
-```sh
+---
+
+## Как пользоваться
+
+### Карта
+Четыре зоны фермы: **Огород**, **У забора**, **Сарай**, **Теплица**. Кликни на зону — появится попап с журналом событий этой зоны. Добавляй наблюдения прямо с карты.
+
+### Журнал (кнопка 📖 в шапке)
+Полный список всех записанных событий. Каждое можно отредактировать или удалить. Справа — оценка и рекомендации от AI.
+
+### Настройка модели
+Три группы параметров:
+- **Скорость перемещения** — окно (в минутах), в котором два сигнала в разных зонах считаются от одного кролика
+- **Скорость выцветания следов** — насколько быстро старые наблюдения теряют вес
+- **Параметры по типу сигнала** — доверие к сигналу и сколько кроликов он «весит»
+
+Кнопка «Быстрые кнопки» — создай шорткаты для частых комбинаций (например, «3 следа в сарае») и добавляй события одним кликом.
+
+### Оценка (кнопка 🥕 в шапке)
+Разбор оценки: вклад каждого сигнала, факторы уверенности с пояснениями.
+
+---
+
+## Как устроена модель
+
+Расчёт идёт в два слоя.
+
+**Слой 1 — схлопывание дублей.** Если один и тот же тип сигнала в одной зоне появился несколько раз в течение 60 минут — это один кролик, увиденный несколько раз. Берём сигнал с наибольшим вкладом.
+
+**Слой 2 — поправка на перемещение.** Если после схлопывания осталось два сигнала в *разных* зонах, появившихся с разницей меньше `movementWindowMinutes`, — возможно, один кролик переместился. Вычитаем `0.5 × min(вклад_A, вклад_B)` у меньшего. Если сигналы одновременны — точно разные кролики, поправка не применяется.
+
+**Уверенность** = взвешенное среднее трёх факторов:
+- разнообразие типов сигналов (35%)
+- средняя заметность событий (30%)
+- временна́я согласованность по зонам (35%)
+
+**Свежесть** — мультипликатор: новейший сигнал получает 1.0, самый старый не опускается ниже 0.4.
+
+---
+
+## Локальная разработка
+
+### Только фронтенд (модель работает в браузере, AI недоступен)
+
+```bash
 npm install
-npm run dev          # http://localhost:5173
+npm run dev       # http://localhost:5173
 ```
 
-**With AI backend**:
+### Фронтенд + AI-бэкенд
 
-```sh
+```bash
+# Терминал 1 — бэкенд
 cd api
-cp .env.example .env        # fill in ANTHROPIC_API_KEY
+cp .env.example .env    # вставь ANTHROPIC_API_KEY
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8080
+
+# Терминал 2 — фронтенд
+npm run dev
 ```
 
-## Production (Docker Compose)
+Vite проксирует `/api` → `http://localhost:8080`, так что фронт ничего не знает о порте.
 
-```sh
-cp api/.env.example .env    # add ANTHROPIC_API_KEY
+---
+
+## Деплой (Docker Compose)
+
+```bash
+cp api/.env.example .env   # заполни ANTHROPIC_API_KEY
 docker compose up -d
 ```
 
-The API is not exposed on the public host — only Caddy on the internal Docker network can reach it (`expose:` not `ports:`).
+API поднимается внутри Docker-сети (`expose`, не `ports`), снаружи недоступен — только через Caddy-прокси.
 
-## Tests
+---
 
-```sh
-npm test    # 37 model unit tests
+## Переменные окружения
+
+| Переменная | Обязательно | Описание |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Да (для AI) | Ключ с [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+
+Шаблон: `api/.env.example`. Файл `.env` в `.gitignore` — в репо не попадёт.
+
+---
+
+## Тесты
+
+```bash
+npm test    # 43 юнит-теста модели расчёта
 ```
 
-## Environment variables
+Тесты покрывают: схлопывание дублей, поправку на перемещение, свежесть, уверенность, расчёт по зонам, граничные случаи (0 событий, одновременные сигналы, одна зона).
 
-| Variable | Required | Description |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | API key from [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+---
 
-See `api/.env.example` for the template.
+## Структура проекта
+
+```
+├── src/
+│   ├── app.js              — главный рендер, state, обработчики
+│   ├── model.js            — расчёт кроликов, уверенности, вкладов
+│   ├── model.test.js       — 43 юнит-теста
+│   ├── data.js             — стартовые события и метаданные
+│   ├── confidence.js       — факторы уверенности для UI
+│   └── components/         — Tip, Dropdown, ModelParams и другие
+├── api/
+│   ├── main.py             — FastAPI: /api/advise → Claude Haiku
+│   └── requirements.txt
+├── public/assets/          — спрайты Stardew Valley
+├── AI-Worklog.md           — дневник разработки
+└── docker-compose.yml
+```
+
+---
+
+**— Карина Ларк** · Тестовое задание AI-first Developer · MOX
