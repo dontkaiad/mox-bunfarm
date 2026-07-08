@@ -103,6 +103,11 @@ let state = {
   customButtons: [],
   nextCqbId: 1,
   showCqbForm: false,
+  customEventTypes: [],
+  nextCetId: 1,
+  showCetForm: false,
+  importError: null,
+  pdfLoading: false,
 }
 
 function setState(patch) {
@@ -196,14 +201,116 @@ window._BF = {
   updateRPU(type, value) {
     setState(s => ({ params: { ...s.params, rabbitsPerUnit: { ...s.params.rabbitsPerUnit, [type]: 0.3 + (+value - 1) / 9 * 1.7 } } }))
   },
+
+  // ── Custom event types ──────────────────────────────────────────────────
+  toggleCetForm() { setState(s => ({ showCetForm: !s.showCetForm })) },
+  addCustomType({ label, emoji, rpu, rel }) {
+    const id = 'cet_' + state.nextCetId
+    setState(s => ({
+      customEventTypes: [...s.customEventTypes, { id, label, emoji, rabbitsPerUnit: rpu, reliability: rel }],
+      nextCetId: s.nextCetId + 1,
+      showCetForm: false,
+      params: {
+        ...s.params,
+        rabbitsPerUnit: { ...s.params.rabbitsPerUnit, [id]: rpu },
+        reliability:    { ...s.params.reliability,    [id]: rel },
+      },
+    }))
+  },
+  deleteCustomType(id) {
+    setState(s => {
+      const newRpu = { ...s.params.rabbitsPerUnit }
+      const newRel = { ...s.params.reliability }
+      delete newRpu[id]
+      delete newRel[id]
+      return {
+        customEventTypes: s.customEventTypes.filter(t => t.id !== id),
+        events: s.events.filter(e => e.event !== id),
+        params: { ...s.params, rabbitsPerUnit: newRpu, reliability: newRel },
+      }
+    })
+  },
+  saveCustomType() {
+    const label = document.getElementById('cet-label')?.value.trim()
+    const emoji = document.getElementById('cet-emoji')?.value.trim() || '🐇'
+    const rpuSlider = +document.getElementById('cet-rpu')?.value || 5
+    const relSlider = +document.getElementById('cet-rel')?.value || 5
+    if (!label) return
+    const rpu = 0.3 + (rpuSlider - 1) / 9 * 1.7
+    const rel = 0.3 + (relSlider - 1) / 9 * 0.6
+    window._BF.addCustomType({ label, emoji: emoji || '🐇', rpu, rel })
+  },
+
+  // ── Import / Export / PDF ───────────────────────────────────────────────
+  exportEvents() {
+    const content = JSON.stringify(state.events, null, 2)
+    const blob = new Blob([content], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url
+    a.download = 'bunfarm-events.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+  importEvents() {
+    document.getElementById('bf-import-file')?.click()
+  },
+  handleImportFile(input) {
+    const file = input.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result)
+        if (!Array.isArray(data)) throw new Error('Ожидается массив событий')
+        if (data.length === 0) throw new Error('Массив пуст — нечего загружать')
+        for (let i = 0; i < data.length; i++) {
+          const item = data[i], pfx = `Запись ${i + 1}: `
+          if (typeof item.id !== 'string' || !item.id) throw new Error(pfx + 'поле id должно быть строкой')
+          if (typeof item.event !== 'string' || !item.event) throw new Error(pfx + 'поле event должно быть строкой')
+          if (typeof item.location !== 'string' || !item.location) throw new Error(pfx + 'поле location должно быть строкой')
+          if (!Number.isInteger(item.count) || item.count < 1) throw new Error(pfx + 'count должен быть целым числом ≥ 1')
+          if (typeof item.intensity !== 'number' || item.intensity < 1 || item.intensity > 10) throw new Error(pfx + 'intensity должен быть числом от 1 до 10')
+          if (typeof item.time !== 'string' || !/^\d{2}:\d{2}$/.test(item.time)) throw new Error(pfx + 'time должен быть в формате ЧЧ:ММ')
+        }
+        input.value = ''
+        setState({ events: data, importError: null })
+      } catch (err) {
+        input.value = ''
+        setState({ importError: err.message })
+      }
+    }
+    reader.onerror = () => { input.value = ''; setState({ importError: 'Не удалось прочитать файл' }) }
+    reader.readAsText(file)
+  },
+  downloadPdf() {
+    if (state.pdfLoading) return
+    setState({ pdfLoading: true })
+    const { events, params } = state
+    const allEventMeta = { ...EVENT_META }
+    state.customEventTypes.forEach(t => { allEventMeta[t.id] = { label: t.label, emoji: t.emoji } })
+    const rabbits      = calculateRabbits(events, params)
+    const byZone       = calculateByZone(events, params)
+    const confidence   = calculateConfidence(events, params, EVENT_TYPES.length + state.customEventTypes.length)
+    const contributions = calculateContributions(events, params)
+    const explanation  = buildSubtitle(rabbits, byZone, events, params, allEventMeta)
+    import('./pdfReport.js').then(({ downloadPdfReport }) =>
+      downloadPdfReport({ events, rabbits, confidence, contributions, byZone, params, eventMeta: allEventMeta, llmRecs: state.llmRecs, explanation })
+    ).catch(err => console.error('PDF error:', err))
+      .finally(() => setState({ pdfLoading: false }))
+  },
 }
 
 // ── render ─────────────────────────────────────────────────────────────────
 function render() {
-  const { events, params, activeZone, activeTab, diaryOpen, scoreOpen, editingId, editDrafts, isAddingNew, newDraft, explainerOpen } = state
+  const { events, params, activeZone, activeTab, diaryOpen, scoreOpen, editingId, editDrafts, isAddingNew, newDraft, explainerOpen, customEventTypes, importError, pdfLoading } = state
+
+  const allEventTypes = [...EVENT_TYPES, ...customEventTypes.map(t => t.id)]
+  const allEventMeta  = { ...EVENT_META }
+  customEventTypes.forEach(t => { allEventMeta[t.id] = { label: t.label, emoji: t.emoji } })
 
   const rabbits = calculateRabbits(events, params)
-  const confidence = calculateConfidence(events, params, EVENT_TYPES.length)
+  const confidence = calculateConfidence(events, params, allEventTypes.length)
   const contributions = calculateContributions(events, params)
   const byZone = calculateByZone(events, params)
   const explanation = buildSubtitle(rabbits, byZone, events, params, EVENT_META)
@@ -310,7 +417,7 @@ function render() {
       const popupLeft = layout.left < 30 ? 53 : 4
 
       const evListHTML = zoneEvents.map(e => {
-        const meta = EVENT_META[e.event], pct = pctMap[e.id]??0
+        const meta = allEventMeta[e.event] ?? { emoji: '?', label: e.event }, pct = pctMap[e.id]??0
         return `<div style="background:rgba(255,248,225,.55);border:1px solid #c9a35f;border-radius:4px;padding:8px 10px;display:flex;gap:8px;align-items:center;font-size:12.5px;color:#4a3520;">
           <span>${meta.emoji}</span><span style="flex:1;">${meta.label}</span>
           <span style="color:#7a5235;font-size:.82rem;">${e.time}</span>
@@ -406,7 +513,7 @@ function render() {
   }
 
   function renderSettings() {
-    const { customButtons, showCqbForm } = state
+    const { customButtons, showCqbForm, showCetForm } = state
     const mvHTML = MOVEMENT_PRESETS.map(p => {
       const active = params.movementWindowMinutes === p.value
       return `<div onclick="window._BF.updateMovement(${p.value})" style="flex:1;text-align:center;padding:5px 8px;background:${active?'#e8a020':'rgba(92,51,25,.1)'};border:2px solid #8b5e3c;border-radius:4px;color:${active?'#3d1f00':'#7a5235'};font-size:.95rem;cursor:pointer;">${p.label}</div>`
@@ -415,12 +522,16 @@ function render() {
       const active = params.freshnessWindowMinutes === p.value
       return `<div onclick="window._BF.updateFreshness(${p.value})" style="flex:1;text-align:center;padding:5px 8px;background:${active?'#e8a020':'rgba(92,51,25,.1)'};border:2px solid #8b5e3c;border-radius:4px;color:${active?'#3d1f00':'#7a5235'};font-size:.95rem;cursor:pointer;">${p.label}</div>`
     }).join('')
-    const blocksHTML = EVENT_TYPES.map(type => {
-      const meta = EVENT_META[type]
+    const blocksHTML = allEventTypes.map(type => {
+      const meta = allEventMeta[type]
+      const isCustom = customEventTypes.some(t => t.id === type)
       const relSlider = Math.round(params.reliability[type] * 10)
       const rpuSlider = Math.max(1, Math.min(10, Math.round((params.rabbitsPerUnit[type] - 0.3) / 1.7 * 9 + 1)))
       return `<div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:10px;">
-        <div style="font-size:1rem;color:#5c3319;margin-bottom:5px;">${meta.emoji} ${meta.label}</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:1rem;color:#5c3319;margin-bottom:5px;">
+          <span>${meta.emoji} ${meta.label}</span>
+          ${isCustom ? `<span onclick="window._BF.deleteCustomType('${type}')" title="Удалить тип" style="margin-left:auto;background:none;border:none;color:#c84b0f;cursor:pointer;font-size:.8rem;padding:0 4px;" >✕ удалить</span>` : ''}
+        </div>
         <div style="display:flex;align-items:center;margin-bottom:3px;">
           <span style="font-size:.85rem;color:#7a5235;">Доверие к сигналу</span>
           ${tip('Насколько надёжен этот тип следа. При высоком доверии система берёт сигнал в полную силу.')}
@@ -443,7 +554,7 @@ function render() {
     const cqbListHTML = customButtons.length
       ? customButtons.map(b => `
           <span style="display:inline-flex;align-items:center;gap:5px;background:#d4b896;border:2px solid #8b5e3c;padding:4px 10px;border-radius:4px;font-size:.9rem;color:#3d1f00;">
-            <span onclick="window._BF.fireCustomButton('${b.id}')" style="cursor:pointer;">${EVENT_META[b.event]?.emoji||'?'} ${b.label}</span>
+            <span onclick="window._BF.fireCustomButton('${b.id}')" style="cursor:pointer;">${allEventMeta[b.event]?.emoji||'?'} ${b.label}</span>
             <button onclick="window._BF.deleteCustomButton('${b.id}')" style="background:none;border:none;color:#7a2000;cursor:pointer;font-size:.8rem;padding:0 2px;" title="Удалить">✕</button>
           </span>`).join('')
       : `<span style="font-size:.85rem;color:#7a5235;">Пока нет кнопок — добавьте ниже</span>`
@@ -456,7 +567,7 @@ function render() {
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
             <select id="cqb-event" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
-              ${EVENT_TYPES.map(t=>`<option value="${t}">${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+              ${allEventTypes.map(t=>`<option value="${t}">${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Зона
@@ -476,6 +587,36 @@ function render() {
           <div onclick="window._BF.toggleCqbForm()" style="border:1px solid #8b5e3c;color:#7a5235;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.9rem;">Отмена</div>
         </div>
       </div>` : `<div onclick="window._BF.toggleCqbForm()" style="margin-top:8px;display:inline-block;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:3px 12px;border-radius:4px;cursor:pointer;font-size:.9rem;">+ Новая кнопка</div>`
+
+    const cetFormHTML = showCetForm ? `
+      <div style="margin-top:8px;background:rgba(0,0,0,.05);border:1px solid #c4a06c;border-radius:4px;padding:10px;display:flex;flex-direction:column;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Название
+            <input id="cet-label" type="text" placeholder="напр. Укус" maxlength="30" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+          <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Эмодзи
+            <input id="cet-emoji" type="text" placeholder="🐰" maxlength="4" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:#7a5235;">Доверие к сигналу (1–10)
+          ${tip('Насколько надёжен этот тип наблюдения. Высокое доверие — сигнал учитывается в полную силу.')}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input id="cet-rel" type="range" min="1" max="10" step="1" value="5" oninput="document.getElementById('cet-rel-v').textContent=this.value" style="flex:1;" />
+          <span id="cet-rel-v" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">5</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:.85rem;color:#7a5235;">Кроликов за сигнал (1–10)
+          ${tip('Сколько кроликов "весит" один такой след. Высокое значение — сигнал сильно влияет на итог.')}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input id="cet-rpu" type="range" min="1" max="10" step="1" value="5" oninput="document.getElementById('cet-rpu-v').textContent=this.value" style="flex:1;" />
+          <span id="cet-rpu-v" style="min-width:20px;text-align:right;color:#5c3319;font-weight:bold;">5</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div onclick="window._BF.saveCustomType()" style="background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:4px 14px;border-radius:4px;font-weight:bold;cursor:pointer;font-size:.9rem;">✓ Создать тип</div>
+          <div onclick="window._BF.toggleCetForm()" style="border:1px solid #8b5e3c;color:#7a5235;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.9rem;">Отмена</div>
+        </div>
+      </div>` : `<div onclick="window._BF.toggleCetForm()" style="margin-top:8px;display:inline-block;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:3px 12px;border-radius:4px;cursor:pointer;font-size:.9rem;">+ Добавить тип сигнала</div>`
 
     return `<div style="display:flex;flex-direction:column;gap:12px;">
       <div style="border-bottom:1px dashed rgba(139,94,60,.3);padding-bottom:12px;">
@@ -501,6 +642,13 @@ function render() {
         <div style="display:flex;gap:6px;">${frHTML}</div>
       </div>
       ${blocksHTML}
+      <div style="border-top:2px dashed rgba(139,94,60,.3);padding-top:14px;">
+        <div style="display:flex;align-items:center;font-size:1rem;color:#5c3319;margin-bottom:8px;">
+          🔬 Кастомные типы сигналов
+          ${tip('Добавьте свои типы наблюдений с произвольным именем, эмодзи и весами. Они появятся в журнале и в форме быстрых кнопок.')}
+        </div>
+        ${cetFormHTML}
+      </div>
     </div>`
   }
 
@@ -590,7 +738,7 @@ function render() {
     const evtMap = Object.fromEntries(events.map(e => [e.id, e]))
     const ranked = [...contributions].sort((a, b) => b.value - a.value).map(c => {
       const evt = evtMap[c.id]; if (!evt) return null
-      const meta = EVENT_META[evt.event]
+      const meta = allEventMeta[evt.event] ?? { emoji: '?', label: evt.event }
       const isCollapsed = c.percent === 0
       const pct = isCollapsed ? 0 : Math.round((c.value / (totalVal || 1)) * 100)
       const role = signalRole(pct)
@@ -666,13 +814,13 @@ function render() {
   function renderDiary() {
     const pctMapAll = Object.fromEntries(contributions.map(c => [c.id, c.percent]))
     const eventsHTML = events.map(e => {
-      const meta = EVENT_META[e.event], pct = pctMapAll[e.id]??0
+      const meta = allEventMeta[e.event] ?? { emoji: '?', label: e.event }, pct = pctMapAll[e.id]??0
       const isEditing = editingId === e.id, draft = editDrafts[e.id] ?? e
       const editForm = isEditing ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-top:none;border-radius:0 0 5px 5px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
             <select onchange="window._BF.updateDraftField('${e.id}','event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
-              ${EVENT_TYPES.map(t=>`<option value="${t}"${draft.event===t?' selected':''}>${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+              ${allEventTypes.map(t=>`<option value="${t}"${draft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
             </select>
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
@@ -714,7 +862,7 @@ function render() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
           <select onchange="window._BF.updateNewDraft('event',this.value)" style="padding:4px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;font-family:inherit;">
-            ${EVENT_TYPES.map(t=>`<option value="${t}"${newDraft.event===t?' selected':''}>${EVENT_META[t].emoji} ${EVENT_META[t].label}</option>`).join('')}
+            ${allEventTypes.map(t=>`<option value="${t}"${newDraft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
           </select>
         </label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
@@ -757,7 +905,14 @@ function render() {
         <div style="display:flex;width:100%;height:100%;border-radius:10px;overflow:hidden;">
           <div style="flex:1.15;background:linear-gradient(180deg,#f5e6c8,#ead5b0);padding:22px 24px;overflow-y:auto;box-shadow:inset -10px 0 24px rgba(0,0,0,.12);">
             <div style="font-size:1.3rem;color:#3d1f00;margin-bottom:2px;">Дневник фермера</div>
-            <div style="font-size:.85rem;color:#7a5235;margin-bottom:14px;">Журнал сигналов о кроликах (${events.length})</div>
+            <div style="font-size:.85rem;color:#7a5235;margin-bottom:10px;">Журнал сигналов о кроликах (${events.length})</div>
+            <input type="file" id="bf-import-file" accept=".json" style="display:none;" onchange="window._BF.handleImportFile(this)" />
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+              <div onclick="window._BF.exportEvents()" style="display:inline-flex;align-items:center;gap:5px;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.82rem;">📤 Экспорт</div>
+              <div onclick="window._BF.importEvents()" style="display:inline-flex;align-items:center;gap:5px;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.82rem;">📥 Импорт</div>
+              <div onclick="window._BF.downloadPdf()" style="display:inline-flex;align-items:center;gap:5px;background:rgba(92,51,25,.1);border:2px solid #8b5e3c;color:#5c3319;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.82rem;">${pdfLoading ? '⏳ PDF…' : '📄 PDF отчёт'}</div>
+            </div>
+            ${importError ? `<div style="font-size:.82rem;color:#c84b0f;background:rgba(200,75,15,.08);border:1px solid rgba(200,75,15,.3);border-radius:4px;padding:6px 10px;margin-bottom:10px;">⚠️ ${importError}</div>` : ''}
             ${eventsHTML}${addForm}
             ${!isAddingNew?`<div onclick="window._BF.startAddEvent()" style="margin-top:10px;display:inline-block;background:#e8a020;border:2px solid #8b5e3c;color:#3d1f00;padding:6px 16px;border-radius:4px;font-weight:bold;cursor:pointer;box-shadow:2px 2px 0 rgba(0,0,0,.3);">+ Добавить наблюдение</div>`:''}
           </div>
@@ -817,8 +972,9 @@ render()
 function fetchLlmRecs() {
   setState({ llmLoading: true })
   const { events, params } = state
+  const allTypeCount = EVENT_TYPES.length + state.customEventTypes.length
   const rabbits      = calculateRabbits(events, params)
-  const confidence   = calculateConfidence(events, params, EVENT_TYPES.length)
+  const confidence   = calculateConfidence(events, params, allTypeCount)
   const byZone       = calculateByZone(events, params)
   const contributions = calculateContributions(events, params)
     .map(c => ({ id: c.id, percent: c.percent ?? 0 }))
