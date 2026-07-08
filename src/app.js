@@ -336,7 +336,7 @@ function render() {
   const confidence = calculateConfidence(events, params, allEventTypes.length)
   const contributions = calculateContributions(events, params)
   const byZone = calculateByZone(events, params)
-  const explanation = buildSubtitle(rabbits, byZone, events, params, EVENT_META)
+  const explanation = buildSubtitle(rabbits, byZone, events, params, allEventMeta)
   const confColor = confidence >= 70 ? '#4caf50' : confidence >= 40 ? '#e8a020' : '#c84b0f'
   const rabbitsDisplay = rabbitRange(rabbits)
 
