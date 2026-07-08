@@ -167,7 +167,14 @@ window._BF = {
     if (!b) return
     const now = new Date().toTimeString().slice(0, 5)
     setState(s => ({
-      events: [...s.events, { ...b, id: 'evt_' + Date.now(), time: now }],
+      events: [...s.events, {
+        id: 'evt_' + Date.now(),
+        event: b.event,
+        location: b.location,
+        count: b.count,
+        intensity: b.intensity,
+        time: now,
+      }],
       activeTab: 'map',
     }))
   },
