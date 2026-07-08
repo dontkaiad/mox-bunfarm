@@ -85,6 +85,18 @@ function heatColor(value, max) {
 
 function BLANK_EVENT() { return { event: 'footprints', location: 'Огород', count: 1, intensity: 5, time: '12:00' } }
 
+// ── Custom dropdown (replaces native <select> so options are themeable) ──────
+function renderSelect(id, options, currentValue, onchangeExpr) {
+  const cur = options.find(o => o.value === currentValue)
+  const optHTML = options.map(o => {
+    const sv = o.value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    const call = onchangeExpr ? onchangeExpr.replace(/VALUE/g, "'" + sv + "'") + ';' : ''
+    return `<div class="bf-csel-opt${o.value === currentValue ? ' sel' : ''}" onclick="${call}window._BFcsel.pick(this,'${id}','${sv}');event.stopPropagation();">${o.label}</div>`
+  }).join('')
+  const safeVal = (currentValue || '').replace(/"/g, '&quot;')
+  return `<input type="hidden" id="${id}" value="${safeVal}"><div class="bf-csel" onclick="event.stopPropagation();window._BFcsel.toggle(this);"><div class="bf-csel-trigger"><span>${cur ? cur.label : currentValue}</span><span class="bf-csel-arrow">▾</span></div><div class="bf-csel-panel">${optHTML}</div></div>`
+}
+
 // ── state ──────────────────────────────────────────────────────────────────
 let state = {
   events: [...INITIAL_EVENTS],
@@ -300,6 +312,23 @@ window._BF = {
       .finally(() => setState({ pdfLoading: false }))
   },
 }
+
+// ── Custom dropdown controller ─────────────────────────────────────────────
+window._BFcsel = {
+  toggle(el) {
+    const isOpen = el.classList.contains('open')
+    document.querySelectorAll('.bf-csel.open').forEach(e => e.classList.remove('open'))
+    if (!isOpen) el.classList.add('open')
+  },
+  pick(optEl, id, value) {
+    const hidden = document.getElementById(id)
+    if (hidden) hidden.value = value
+    optEl.closest('.bf-csel')?.classList.remove('open')
+  },
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.bf-csel.open').forEach(e => e.classList.remove('open'))
+})
 
 // ── render ─────────────────────────────────────────────────────────────────
 function render() {
@@ -566,14 +595,10 @@ function render() {
             <input id="cqb-label" type="text" placeholder="напр. Следы в сарае" maxlength="30" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-            <select id="cqb-event" class="bf-select">
-              ${allEventTypes.map(t=>`<option value="${t}">${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
-            </select>
+            ${renderSelect('cqb-event', allEventTypes.map(t => ({value: t, label: allEventMeta[t].emoji + ' ' + allEventMeta[t].label})), allEventTypes[0] || EVENT_TYPES[0], '')}
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Зона
-            <select id="cqb-location" class="bf-select">
-              ${LOCATIONS.map(l=>`<option value="${l}">${l}</option>`).join('')}
-            </select>
+            ${renderSelect('cqb-location', LOCATIONS.map(l => ({value: l, label: l})), LOCATIONS[0], '')}
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Кол-во
             <input id="cqb-count" type="number" value="1" min="1" max="99" style="padding:3px 6px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
@@ -819,14 +844,10 @@ function render() {
       const editForm = isEditing ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-top:none;border-radius:0 0 5px 5px;padding:12px;display:flex;flex-direction:column;gap:8px;">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-            <select onchange="window._BF.updateDraftField('${e.id}','event',this.value)" class="bf-select">
-              ${allEventTypes.map(t=>`<option value="${t}"${draft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
-            </select>
+            ${renderSelect('sel_ev_' + e.id, allEventTypes.map(t => ({value: t, label: allEventMeta[t].emoji + ' ' + allEventMeta[t].label})), draft.event, "window._BF.updateDraftField('" + e.id + "','event',VALUE)")}
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
-            <select onchange="window._BF.updateDraftField('${e.id}','location',this.value)" class="bf-select">
-              ${LOCATIONS.map(l=>`<option value="${l}"${draft.location===l?' selected':''}>${l}</option>`).join('')}
-            </select>
+            ${renderSelect('sel_loc_' + e.id, LOCATIONS.map(l => ({value: l, label: l})), draft.location, "window._BF.updateDraftField('" + e.id + "','location',VALUE)")}
           </label>
           <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Время
             <input type="time" value="${draft.time}" onchange="window._BF.updateDraftField('${e.id}','time',this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
@@ -861,14 +882,10 @@ function render() {
     const addForm = (isAddingNew && newDraft) ? `<div style="background:rgba(255,255,255,.55);border:1px solid #c9a35f;border-radius:5px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-top:6px;">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Тип сигнала
-          <select onchange="window._BF.updateNewDraft('event',this.value)" class="bf-select">
-            ${allEventTypes.map(t=>`<option value="${t}"${newDraft.event===t?' selected':''}>${allEventMeta[t].emoji} ${allEventMeta[t].label}</option>`).join('')}
-          </select>
+          ${renderSelect('sel_new_ev', allEventTypes.map(t => ({value: t, label: allEventMeta[t].emoji + ' ' + allEventMeta[t].label})), newDraft.event, "window._BF.updateNewDraft('event',VALUE)")}
         </label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Место
-          <select onchange="window._BF.updateNewDraft('location',this.value)" class="bf-select">
-            ${LOCATIONS.map(l=>`<option value="${l}"${newDraft.location===l?' selected':''}>${l}</option>`).join('')}
-          </select>
+          ${renderSelect('sel_new_loc', LOCATIONS.map(l => ({value: l, label: l})), newDraft.location, "window._BF.updateNewDraft('location',VALUE)")}
         </label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:.85rem;color:#7a5235;">Время
           <input type="time" value="${newDraft.time}" onchange="window._BF.updateNewDraft('time',this.value)" style="padding:3px 5px;border:1px solid #8b5e3c;border-radius:3px;background:#fff8ec;color:#3d1f00;" />
